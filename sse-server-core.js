@@ -9,22 +9,17 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// Store active SSE connections
-const connections = new Map(); // Map<connectionId, { url: string, scenario?: string, response: ServerResponse, createdAt: Date }>
-
-// Store active mock timers
-const mockTimers = new Map(); // Map<connectionId, NodeJS.Timeout[]>
+const connections = new Map();
+const mockTimers = new Map();
 
 function generateConnectionId() {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-// Get mock folder path from environment or default
 function getMockFolderPath(mockFolderPath) {
-    return mockFolderPath || process.env.MOCKINGSTAR_FOLDER || path.join(__dirname, 'mocks');
+    return mockFolderPath || process.env.MOCKINGSSE_FOLDER || path.join(__dirname, 'mocks');
 }
 
-// Normalize URL by removing query parameters for comparison
 function normalizeUrl(urlString) {
     try {
         const url = new URL(urlString);
@@ -38,14 +33,12 @@ function normalizeUrl(urlString) {
     }
 }
 
-// Parse query parameters from URL
 function parseQueryParams(urlString) {
     try {
         const url = new URL(urlString);
         const params = {};
         url.searchParams.forEach((value, key) => {
             if (params[key]) {
-                // Multiple values for same key - convert to array
                 if (Array.isArray(params[key])) {
                     params[key].push(value);
                 } else {
@@ -57,7 +50,6 @@ function parseQueryParams(urlString) {
         });
         return params;
     } catch (error) {
-        // If not a valid URL, try manual parsing
         const queryIndex = urlString.indexOf('?');
         if (queryIndex === -1) {
             return {};
@@ -84,26 +76,21 @@ function parseQueryParams(urlString) {
     }
 }
 
-// Compare query parameters
 function compareQueryParams(mockParams, targetParams, matchAllQueries, matchQueries) {
     if (matchAllQueries) {
-        // All query parameters must match exactly
         const mockKeys = Object.keys(mockParams).sort();
         const targetKeys = Object.keys(targetParams).sort();
         
-        // Both must have the same number of query parameters
         if (mockKeys.length !== targetKeys.length) {
             return false;
         }
         
-        // All keys must match
         for (let i = 0; i < mockKeys.length; i++) {
             if (mockKeys[i] !== targetKeys[i]) {
                 return false;
             }
         }
         
-        // All values must match
         for (const key of mockKeys) {
             if (JSON.stringify(mockParams[key]) !== JSON.stringify(targetParams[key])) {
                 return false;
@@ -111,14 +98,11 @@ function compareQueryParams(mockParams, targetParams, matchAllQueries, matchQuer
         }
         return true;
     } else if (matchQueries && matchQueries.length > 0) {
-        // Only specified query parameters must match
         for (const key of matchQueries) {
-            // Both mock and target must have this parameter
             if (!(key in mockParams) || !(key in targetParams)) {
                 return false;
             }
             
-            // Values must match
             if (JSON.stringify(mockParams[key]) !== JSON.stringify(targetParams[key])) {
                 return false;
             }
@@ -126,45 +110,36 @@ function compareQueryParams(mockParams, targetParams, matchAllQueries, matchQuer
         return true;
     }
     
-    // No query matching required
     return true;
 }
 
-// Match URLs by comparing base URLs (ignoring query parameters)
 function matchUrlByBase(mockUrl, targetUrl) {
     const mockBase = normalizeUrl(mockUrl);
     const targetBase = normalizeUrl(targetUrl);
     return mockBase === targetBase;
 }
 
-// Match URLs with query parameter configuration
 function matchUrlWithConfig(mockUrl, targetUrl, matchingConfig) {
-    // First check base URL match
     if (!matchUrlByBase(mockUrl, targetUrl)) {
         return false;
     }
     
-    // If no matching config, use default behavior (ignore queries)
     if (!matchingConfig) {
         return true;
     }
     
     const { matchAllQueries, matchQueries } = matchingConfig;
     
-    // If no query matching is required, base URL match is enough
     if (!matchAllQueries && (!matchQueries || matchQueries.length === 0)) {
         return true;
     }
     
-    // Parse query parameters
     const mockParams = parseQueryParams(mockUrl);
     const targetParams = parseQueryParams(targetUrl);
     
-    // Compare query parameters based on config
     return compareQueryParams(mockParams, targetParams, matchAllQueries, matchQueries);
 }
 
-// Simple URL pattern matching (supports wildcards)
 function matchUrlPattern(pattern, url) {
     const regexPattern = pattern
         .replace(/\*/g, '.*')
@@ -173,7 +148,6 @@ function matchUrlPattern(pattern, url) {
     return regex.test(url);
 }
 
-// Find mock file for a given URL and scenario
 function findMockFile(targetUrl, scenario, mockFolderPath) {
     const rootPath = getMockFolderPath(mockFolderPath);
     const domainsPath = path.join(rootPath, 'Domains');
@@ -202,14 +176,11 @@ function findMockFile(targetUrl, scenario, mockFolderPath) {
             try {
                 const mockData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
                 
-                // Check URL match first
                 let urlMatches = false;
                 
-                // Check exact match first
                 if (mockData.url === targetUrl) {
                     urlMatches = true;
                 } else {
-                    // Check with matching configuration
                     const matchingConfig = mockData.matching || null;
                     if (matchUrlWithConfig(mockData.url, targetUrl, matchingConfig)) {
                         urlMatches = true;
@@ -217,17 +188,13 @@ function findMockFile(targetUrl, scenario, mockFolderPath) {
                 }
                 
                 if (urlMatches) {
-                    // Check scenario match
                     const mockScenario = mockData.scenario || null;
                     
-                    // If scenario is provided in connection, only match mocks with matching scenario
                     if (scenario) {
                         if (mockScenario && String(mockScenario) === String(scenario)) {
                             matchingMocks.push({ filePath, mockData, hasScenario: true });
                         }
                     } else {
-                        // If no scenario in connection, prefer mocks without scenario
-                        // But also collect mocks with scenario for fallback
                         if (!mockScenario) {
                             matchingMocks.unshift({ filePath, mockData, hasScenario: false });
                         } else {
@@ -241,18 +208,13 @@ function findMockFile(targetUrl, scenario, mockFolderPath) {
         }
     }
     
-    // Return the best match:
-    // 1. If scenario provided: return mock with matching scenario
-    // 2. If no scenario: return mock without scenario (first in list)
     if (matchingMocks.length > 0) {
         if (scenario) {
-            // Find mock with matching scenario
             const scenarioMatch = matchingMocks.find(m => m.hasScenario);
             if (scenarioMatch) {
                 return { filePath: scenarioMatch.filePath, mockData: scenarioMatch.mockData };
             }
         } else {
-            // Return first mock without scenario
             const noScenarioMatch = matchingMocks.find(m => !m.hasScenario);
             if (noScenarioMatch) {
                 return { filePath: noScenarioMatch.filePath, mockData: noScenarioMatch.mockData };
@@ -263,7 +225,6 @@ function findMockFile(targetUrl, scenario, mockFolderPath) {
     return null;
 }
 
-// Start mock with timed responses
 function startMock(connectionId, mockData) {
     clearMockTimers(connectionId);
     
@@ -302,7 +263,6 @@ function startMock(connectionId, mockData) {
     console.log(`[SSE] Mock started for connection ${connectionId} with ${responses.length} scheduled events`);
 }
 
-// Clear mock timers for a connection
 function clearMockTimers(connectionId) {
     const timers = mockTimers.get(connectionId);
     if (timers) {
@@ -312,7 +272,6 @@ function clearMockTimers(connectionId) {
     }
 }
 
-// Check for mock and start it if found
 function checkAndStartMock(connectionId, targetUrl, scenario, mockFolderPath) {
     const mockFile = findMockFile(targetUrl, scenario, mockFolderPath);
     
@@ -324,7 +283,6 @@ function checkAndStartMock(connectionId, targetUrl, scenario, mockFolderPath) {
     }
 }
 
-// Send event to connection
 function sendEventToConnection(connectionId, data) {
     const connection = connections.get(connectionId);
     if (connection && connection.response) {
@@ -336,7 +294,6 @@ function sendEventToConnection(connectionId, data) {
     }
 }
 
-// Send event to URL
 function sendEventToURL(targetUrl, data) {
     const targetUrlString = String(targetUrl);
     let sentCount = 0;
@@ -356,7 +313,6 @@ function sendEventToURL(targetUrl, data) {
     console.log(`[SSE] Event sent to ${sentCount} connection(s) for URL: ${targetUrl}`);
 }
 
-// Send event to all connections
 function sendEventToAll(data) {
     let sentCount = 0;
 
@@ -371,7 +327,6 @@ function sendEventToAll(data) {
     console.log(`[SSE] Event sent to all ${sentCount} connection(s)`);
 }
 
-// Get all connections
 function getConnections() {
     return Array.from(connections.entries()).map(([id, conn]) => ({
         id,
@@ -381,12 +336,10 @@ function getConnections() {
     }));
 }
 
-// Create SSE server
 function createSSEServer(port, mockFolderPath) {
     const server = http.createServer((req, res) => {
         const pathname = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
 
-        // CORS headers
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Headers', 'Cache-Control, X-SSE-URL, url, sse-url, scenario, x-scenario');
 
@@ -526,7 +479,6 @@ function createSSEServer(port, mockFolderPath) {
                         res.end(JSON.stringify({ error: 'No matching connections found' }));
                     }
                 } else if (targetUrl) {
-                    // Get scenario from request if provided
                     const requestScenario = requestData.scenario || null;
                     const mockFile = findMockFile(targetUrl, requestScenario, mockFolderPath);
                     if (mockFile) {
@@ -538,7 +490,6 @@ function createSSEServer(port, mockFolderPath) {
                                 startedCount = 1;
                             }
                         } else {
-                            // Use mock's matching configuration to find connections
                             const matchingConfig = mockFile.mockData.matching || null;
                             const mockScenario = mockFile.mockData.scenario || null;
                             connections.forEach((conn, id) => {

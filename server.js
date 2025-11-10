@@ -12,7 +12,6 @@ const path = require('path');
 const SSE_PORT = 8009;
 const API_PORT = 8010;
 
-// Import SSE server functionality
 const { 
     createSSEServer, 
     getConnections, 
@@ -24,24 +23,17 @@ const {
     matchUrlWithConfig
 } = require('./sse-server-core');
 
-// Express app for API
 const app = express();
 app.use(cors());
 app.use(express.json());
-// Handle static files for executable (pkg)
-// In pkg, assets are extracted to a temporary directory at runtime
 let publicPath;
 if (process.pkg) {
-    // pkg extracts assets to a temp directory, accessible via __dirname
-    // The public folder should be in the same directory as the executable
     const execDir = path.dirname(process.execPath);
     const publicInExecDir = path.join(execDir, 'public');
     
-    // Check if public exists in exec dir, otherwise try __dirname (pkg temp dir)
     if (fs.existsSync(publicInExecDir)) {
         publicPath = publicInExecDir;
     } else {
-        // pkg extracts assets to a temp directory
         publicPath = path.join(__dirname, 'public');
     }
 } else {
@@ -51,7 +43,6 @@ if (process.pkg) {
 console.log(`[Server] Serving static files from: ${publicPath}`);
 app.use(express.static(publicPath));
 
-// Serve index.html for root route
 app.get('/', (req, res) => {
     const indexPath = path.join(publicPath, 'index.html');
     if (fs.existsSync(indexPath)) {
@@ -61,37 +52,28 @@ app.get('/', (req, res) => {
     }
 });
 
-// Get mock folder path
 function getMockFolderPath() {
-    // Priority 1: MOCKINGSTAR_FOLDER environment variable (set by CLI or user)
-    if (process.env.MOCKINGSTAR_FOLDER) {
-        return process.env.MOCKINGSTAR_FOLDER;
+    if (process.env.MOCKINGSSE_FOLDER) {
+        return process.env.MOCKINGSSE_FOLDER;
     }
     
-    // Priority 2: If running as executable (pkg), use executable directory or home directory
     if (process.pkg) {
-        // Try to use executable directory first
         const execDir = path.dirname(process.execPath);
         const mocksInExecDir = path.join(execDir, 'mocks');
-        // If we can't write to exec dir, use home directory
         try {
-            // Test if we can write to exec dir
             if (!fs.existsSync(mocksInExecDir)) {
                 fs.mkdirSync(mocksInExecDir, { recursive: true });
             }
             return mocksInExecDir;
         } catch (error) {
-            // Fallback to home directory
             const homeDir = require('os').homedir();
             return path.join(homeDir, '.mockingsse', 'mocks');
         }
     }
     
-    // Priority 3: Normal Node.js execution - use project directory
     return path.join(__dirname, 'mocks');
 }
 
-// Ensure mocks directory exists (only if not in snapshot)
 function ensureMocksDirectory() {
     const mocksDir = getMockFolderPath();
     if (!fs.existsSync(mocksDir)) {
@@ -102,17 +84,13 @@ function ensureMocksDirectory() {
             fs.mkdirSync(path.join(mocksDir, 'Domains', 'Dev', 'SSE'), { recursive: true });
         } catch (error) {
             console.error(`[Error] Cannot create mocks directory at ${mocksDir}:`, error.message);
-            console.error(`[Info] Please create the directory manually or set MOCKINGSTAR_FOLDER environment variable`);
+            console.error(`[Info] Please create the directory manually or set MOCKINGSSE_FOLDER environment variable`);
         }
     }
 }
 
-// Initialize mocks directory (defer until after server starts)
 ensureMocksDirectory();
 
-// API Routes
-
-// Get all mock files
 app.get('/api/mocks', (req, res) => {
     const mocksDir = getMockFolderPath();
     const domainsPath = path.join(mocksDir, 'Domains');
@@ -157,7 +135,6 @@ app.get('/api/mocks', (req, res) => {
     res.json(mocks);
 });
 
-// Get single mock file
 app.get('/api/mocks/:id', (req, res) => {
     const mocksDir = getMockFolderPath();
     const domainsPath = path.join(mocksDir, 'Domains');
@@ -194,7 +171,6 @@ app.get('/api/mocks/:id', (req, res) => {
     res.status(404).json({ error: 'Mock not found' });
 });
 
-// Create or update mock file
 app.post('/api/mocks', (req, res) => {
     const { url, responses, data, domain = 'Dev', matching, scenario } = req.body;
     
@@ -206,7 +182,6 @@ app.post('/api/mocks', (req, res) => {
     const domainPath = path.join(mocksDir, 'Domains', domain);
     const sseFolder = path.join(domainPath, 'SSE');
     
-    // Ensure directories exist
     if (!fs.existsSync(domainPath)) {
         fs.mkdirSync(domainPath, { recursive: true });
     }
@@ -214,8 +189,6 @@ app.post('/api/mocks', (req, res) => {
         fs.mkdirSync(sseFolder, { recursive: true });
     }
 
-    // Generate filename from URL and scenario (if provided)
-    // This ensures different scenarios for the same URL create different files
     const urlHash = Buffer.from(url).toString('base64').replace(/[/+=]/g, '').substring(0, 20);
     const scenarioHash = scenario ? Buffer.from(scenario).toString('base64').replace(/[/+=]/g, '').substring(0, 10) : '';
     const fileName = scenarioHash ? `${urlHash}_${scenarioHash}.json` : `${urlHash}.json`;
@@ -230,8 +203,6 @@ app.post('/api/mocks', (req, res) => {
     };
 
     try {
-        // Check if file already exists (for scenario-based mocks, we want to allow overwriting only if same scenario)
-        // But for different scenarios, we want to create new files
         const fileId = scenarioHash ? `${urlHash}_${scenarioHash}` : urlHash;
         
         fs.writeFileSync(filePath, JSON.stringify(mockData, null, 2));
@@ -247,7 +218,6 @@ app.post('/api/mocks', (req, res) => {
     }
 });
 
-// Update mock file
 app.put('/api/mocks/:id', (req, res) => {
     const { url, responses, data, domain = 'Dev', matching, scenario } = req.body;
     
@@ -288,7 +258,6 @@ app.put('/api/mocks/:id', (req, res) => {
     }
 });
 
-// Delete mock file
 app.delete('/api/mocks/:id', (req, res) => {
     const { domain = 'Dev' } = req.query;
     const mocksDir = getMockFolderPath();
@@ -307,19 +276,16 @@ app.delete('/api/mocks/:id', (req, res) => {
     }
 });
 
-// Get active SSE connections
 app.get('/api/connections', (req, res) => {
     const connections = getConnections();
     res.json(connections);
 });
 
-// Start mock for connection(s)
 app.post('/api/mocks/:id/start', (req, res) => {
     const { connectionId, url } = req.body;
     const mocksDir = getMockFolderPath();
     const domainsPath = path.join(mocksDir, 'Domains');
     
-    // Find mock file
     const domains = fs.readdirSync(domainsPath, { withFileTypes: true })
         .filter(dirent => dirent.isDirectory())
         .map(dirent => dirent.name);
@@ -337,8 +303,6 @@ app.post('/api/mocks/:id/start', (req, res) => {
                     startMock(connectionId, mockData);
                     return res.json({ success: true, message: 'Mock started for connection' });
                 } else if (url) {
-                    // Find all connections matching URL and scenario, then start mock
-                    // Use mock's matching configuration to find connections
                     const connections = getConnections();
                     const matchingConfig = mockData.matching || null;
                     const mockScenario = mockData.scenario || null;
@@ -368,15 +332,11 @@ app.post('/api/mocks/:id/start', (req, res) => {
     res.status(404).json({ error: 'Mock not found' });
 });
 
-// Note: matchUrlWithConfig is imported from sse-server-core
-
-// Start API server
 app.listen(API_PORT, () => {
     console.log(`[API Server] Started on port ${API_PORT}`);
     console.log(`[API Server] Web UI: http://localhost:${API_PORT}`);
 });
 
-// Start SSE server
 const sseServer = createSSEServer(SSE_PORT, getMockFolderPath());
 console.log(`[SSE Server] Started on port ${SSE_PORT}`);
 
