@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MockingSSE - SSE Mock Server</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>MockingSSE</h1>
+            <div class="header-actions">
+                <button id="refreshMocks" class="btn btn-secondary">Refresh Mocks</button>
+                <button id="refreshConnections" class="btn btn-secondary">Refresh Connections</button>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="mocks">Mocks</button>
+            <button class="tab-btn" data-tab="connections">Active Connections</button>
+        </div>
+
+        <!-- Mocks Tab -->
+        <div id="mocksTab" class="tab-content active">
+            <div class="mocks-container">
+                <div class="mocks-list">
+                    <h2>Mock Definitions</h2>
+                    <button id="newMockBtn" class="btn btn-primary">+ New Mock</button>
+                    <div id="mocksList" class="mocks-list-items"></div>
+                </div>
+
+                <div class="mock-editor" id="mockEditor">
+                    <div class="editor-placeholder">
+                        <p>Select a mock from the list or create a new one to start editing</p>
+                    </div>
+                    <div class="mock-editor-content" id="mockEditorContent" style="display: none;">
+                        <div class="editor-header">
+                            <h2 id="editorTitle">Edit Mock</h2>
+                            <div class="editor-actions">
+                                <button id="duplicateMockBtn" class="btn btn-secondary">Duplicate by Scenario</button>
+                                <button id="deleteMockBtn" class="btn btn-danger">Delete</button>
+                            </div>
+                        </div>
+                        <form id="mockForm">
+                            <div class="form-group">
+                                <label for="mockUrl">SSE URL</label>
+                                <input type="text" id="mockUrl" placeholder="https://example.com/sse/stream" required>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="mockDomain">Domain</label>
+                                <select id="mockDomain">
+                                    <option value="Dev">Dev</option>
+                                    <option value="Staging">Staging</option>
+                                    <option value="Prod">Prod</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="mockScenario">Scenario (Optional)</label>
+                                <input type="text" id="mockScenario" placeholder="e.g., test-scenario-1">
+                                <small style="color: #666; font-size: 12px; font-style: italic;">If provided, this mock will only match connections with the same scenario</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label>URL Matching Configuration</label>
+                                <div class="matching-config">
+                                    <div class="matching-option">
+                                        <label>
+                                            <input type="checkbox" id="matchAllQueries">
+                                            Match All Query Parameters
+                                        </label>
+                                        <small>If enabled, all query parameters must match exactly</small>
+                                    </div>
+                                    <div class="matching-option">
+                                        <label for="matchQueries">Match Specific Query Parameters (comma-separated)</label>
+                                        <input type="text" id="matchQueries" placeholder="US, overnightEnabled">
+                                        <small>Only these query parameters must match. Leave empty to ignore query parameters.</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Responses</label>
+                                <div id="responsesContainer" class="responses-container">
+                                    <div class="response-item">
+                                        <div class="response-header">
+                                            <span class="response-index">Response 1</span>
+                                            <button type="button" class="btn-remove-response">Remove</button>
+                                        </div>
+                                        <textarea class="response-data" placeholder='{"key": "value"}' rows="4"></textarea>
+                                    </div>
+                                </div>
+                                <button type="button" id="addResponseBtn" class="btn btn-secondary">+ Add Response</button>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Timeline</label>
+                                <div id="timelineContainer" class="timeline-container">
+                                    <div class="timeline-item">
+                                        <div class="timeline-time">
+                                            <label>Time (ms)</label>
+                                            <input type="number" class="timeline-time-input" value="0" min="0" step="100">
+                                        </div>
+                                        <div class="timeline-response">
+                                            <label>Response</label>
+                                            <select class="timeline-response-select">
+                                                <option value="0">Response 1</option>
+                                            </select>
+                                        </div>
+                                        <button type="button" class="btn-remove-timeline">Remove</button>
+                                    </div>
+                                </div>
+                                <button type="button" id="addTimelineBtn" class="btn btn-secondary">+ Add Timeline Event</button>
+                            </div>
+
+                            <div class="form-actions">
+                                <button type="submit" class="btn btn-primary">Save Mock</button>
+                                <button type="button" id="cancelBtn" class="btn btn-secondary">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connections Tab -->
+        <div id="connectionsTab" class="tab-content">
+            <div class="connections-container">
+                <h2>Active SSE Connections</h2>
+                <div id="connectionsList" class="connections-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scenario Input Modal -->
+    <div id="scenarioModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>Duplicate by Scenario</h2>
+                <button class="modal-close" id="closeScenarioModal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="newScenarioInput">New Scenario</label>
+                    <input type="text" id="newScenarioInput" placeholder="e.g., test-scenario-2" required>
+                    <small style="color: #666; font-size: 12px; font-style: italic;">Enter a new scenario name to create a duplicate mock</small>
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="saveScenarioBtn" class="btn btn-primary">Create Mock</button>
+                    <button type="button" id="cancelScenarioBtn" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+

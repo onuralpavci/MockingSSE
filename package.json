@@ -1,0 +1,39 @@
+{
+  "name": "mockingsse",
+  "version": "1.0.0",
+  "description": "MockingSSE - SSE Mock Server with Web UI",
+  "main": "server.js",
+  "bin": {
+    "mockingsse": "./bin/mockingsse.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "pkg . --targets ${PKG_TARGET:-node18-macos-arm64} --out-path bin",
+    "build:mac": "pkg . --targets node18-macos-x64 --out-path bin",
+    "build:mac-arm": "pkg . --targets node18-macos-arm64 --out-path bin",
+    "build:all": "pkg . --targets node18-macos-x64,node18-macos-arm64,node18-linux-x64,node18-win-x64 --out-path bin"
+  },
+  "keywords": ["sse", "mock", "server-sent-events"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*"
+    ],
+    "scripts": [
+      "bin/mockingsse.js",
+      "server.js",
+      "sse-server-core.js"
+    ],
+    "outputPath": "bin"
+  }
+}
+

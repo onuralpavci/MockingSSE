@@ -1,0 +1,25 @@
+{
+  "url": "https://stream.staging-getmidas.com/reactive-market-api/v1/instruments/trade-price/stream?US=NVDA&overnightEnabled=true",
+  "matching": {
+    "matchAllQueries": false,
+    "matchQueries": []
+  },
+  "responses": [
+    {
+      "time": 1000,
+      "response": 0
+    }
+  ],
+  "data": [
+    [
+      {
+        "s": "NVDA",
+        "p": 187.2407,
+        "t": 1762548245000,
+        "c": "US",
+        "cr": "USD"
+      }
+    ]
+  ]
+}
+
