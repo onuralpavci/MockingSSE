@@ -235,11 +235,18 @@ This will trigger GitHub Actions to build executables for all platforms and crea
    # Windows
    unzip mockingsse-windows-x64.zip
    ```
-4. Move to a location in your PATH (optional):
+4. **macOS Gatekeeper Warning**: If you see "Apple could not verify" warning on macOS:
+   - **Option 1** (Recommended): Remove quarantine flag:
+     ```bash
+     xattr -d com.apple.quarantine mockingsse
+     ```
+   - **Option 2**: Go to System Preferences → Security & Privacy → Click "Open Anyway"
+   - **Option 3**: Right-click the executable → Open → Click "Open" in the dialog
+5. Move to a location in your PATH (optional):
    ```bash
    sudo mv mockingsse /usr/local/bin/
    ```
-5. Run it:
+6. Run it:
    ```bash
    mockingsse --mockPath /path/to/your/mocks
    ```
