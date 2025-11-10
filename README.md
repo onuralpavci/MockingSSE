@@ -31,39 +31,37 @@ Download the pre-built executable for your platform from the releases page.
 #### Using Node.js (Development)
 
 ```bash
-# Set mock folder path (optional, defaults to ./mocks)
-export MOCKINGSSE_FOLDER="/path/to/your/mocks"
-
-# Start the server
+# Start the server (defaults to ./mocks)
 npm start
 ```
 
 Or directly:
 
 ```bash
-MOCKINGSSE_FOLDER="/path/to/your/mocks" node server.js
+node server.js
 ```
 
 #### Using Executable (Production)
 
 ```bash
-# Option 1: Use --mockPath CLI parameter
+# Option 1: Use -mp/--mockPath CLI parameter
+./bin/mockingsse -mp /path/to/your/mocks
 ./bin/mockingsse --mockPath /path/to/your/mocks
 
-# Option 2: Use environment variable
-export MOCKINGSSE_FOLDER="/path/to/your/mocks"
-./bin/mockingsse
+# Option 2: If installed globally
+mockingsse -mp /path/to/your/mocks
 
-# Option 3: If installed globally
-mockingsse --mockPath /path/to/your/mocks
+# Option 3: Show help
+./bin/mockingsse -h
+./bin/mockingsse --help
 ```
 
 **CLI Parameters:**
-- `--mockPath <path>`: Set the mock folder path (overrides environment variable)
+- `-mp, --mockPath <path>`: Set the mock folder path
+- `-h, --help`: Show help message
 
 **Default Behavior:**
-- If `--mockPath` is provided, uses that path
-- If `MOCKINGSSE_FOLDER` environment variable is set, uses that path
+- If `-mp/--mockPath` is provided, uses that path
 - If running as executable, uses `~/.mockingsse/mocks` or executable directory
 - Otherwise, uses `./mocks` in the project directory
 
@@ -255,7 +253,7 @@ This will trigger GitHub Actions to build executables for all platforms and crea
    ```
 6. Run it:
    ```bash
-   mockingsse --mockPath /path/to/your/mocks
+   mockingsse -mp /path/to/your/mocks
    ```
 
 ## Future Enhancements

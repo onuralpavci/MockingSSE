@@ -54,7 +54,11 @@ app.get('/', (req, res) => {
 
 function getMockFolderPath() {
     if (process.env.MOCKINGSSE_FOLDER) {
-        return process.env.MOCKINGSSE_FOLDER;
+        const expandedPath = process.env.MOCKINGSSE_FOLDER.startsWith('~/') || process.env.MOCKINGSSE_FOLDER === '~' 
+            ? path.join(require('os').homedir(), process.env.MOCKINGSSE_FOLDER.slice(1))
+            : process.env.MOCKINGSSE_FOLDER;
+        console.log(`[Server] Using mock folder: ${expandedPath}`);
+        return expandedPath;
     }
     
     if (process.pkg) {
@@ -64,14 +68,19 @@ function getMockFolderPath() {
             if (!fs.existsSync(mocksInExecDir)) {
                 fs.mkdirSync(mocksInExecDir, { recursive: true });
             }
+            console.log(`[Server] Using executable directory: ${mocksInExecDir}`);
             return mocksInExecDir;
         } catch (error) {
             const homeDir = require('os').homedir();
-            return path.join(homeDir, '.mockingsse', 'mocks');
+            const fallbackPath = path.join(homeDir, '.mockingsse', 'mocks');
+            console.log(`[Server] Using home directory fallback: ${fallbackPath}`);
+            return fallbackPath;
         }
     }
     
-    return path.join(__dirname, 'mocks');
+    const defaultPath = path.join(__dirname, 'mocks');
+    console.log(`[Server] Using default path: ${defaultPath}`);
+    return defaultPath;
 }
 
 function ensureMocksDirectory() {
