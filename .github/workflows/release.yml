@@ -50,7 +50,7 @@ jobs:
         run: npm ci
 
       - name: Build executable
-        run: pkg . --targets ${{ matrix.target }} --out-path bin
+        run: npx pkg . --targets ${{ matrix.target }} --out-path bin
         env:
           PKG_TARGET: ${{ matrix.target }}
 
