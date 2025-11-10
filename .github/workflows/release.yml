@@ -60,14 +60,23 @@ jobs:
           mkdir -p release
           if [ "${{ matrix.platform }}" = "windows" ]; then
             cp bin/mockingsse${{ matrix.ext }} release/mockingsse${{ matrix.ext }}
-            cd release
-            zip ../mockingsse-${{ matrix.platform }}-${{ matrix.arch }}.zip mockingsse${{ matrix.ext }}
           else
             cp bin/mockingsse release/mockingsse
             chmod +x release/mockingsse
-            cd release
-            tar -czf ../mockingsse-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz mockingsse
           fi
+      
+      - name: Create Windows archive
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path release/mockingsse${{ matrix.ext }} -DestinationPath mockingsse-${{ matrix.platform }}-${{ matrix.arch }}.zip -Force
+      
+      - name: Create Unix archive
+        if: matrix.platform != 'windows'
+        shell: bash
+        run: |
+          cd release
+          tar -czf ../mockingsse-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz mockingsse
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
