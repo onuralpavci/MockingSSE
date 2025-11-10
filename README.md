@@ -229,7 +229,7 @@ This will trigger GitHub Actions to build executables for all platforms and crea
 
 ### Installing from GitHub Release
 
-1. Go to the [Releases](https://github.com/onuralp.avci/MockingSSE/releases) page
+1. Go to the [Releases](https://github.com/onuralpavci/MockingSSE/releases) page
 2. Download the archive for your platform
 3. Extract the archive:
    ```bash
