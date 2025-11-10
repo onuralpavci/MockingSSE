@@ -188,11 +188,18 @@ The executables will be created in the `bin/` directory:
    ```bash
    chmod +x bin/mockingsse-macos-arm64
    ```
-3. Move it to a location in your PATH (optional):
+3. **macOS Gatekeeper Warning**: If you see "Apple could not verify" warning on macOS:
+   - **Option 1** (Recommended): Remove quarantine flag:
+     ```bash
+     xattr -d com.apple.quarantine bin/mockingsse-macos-arm64
+     ```
+   - **Option 2**: Go to System Preferences → Security & Privacy → Click "Open Anyway"
+   - **Option 3**: Right-click the executable → Open → Click "Open" in the dialog
+4. Move it to a location in your PATH (optional):
    ```bash
    sudo mv bin/mockingsse-macos-arm64 /usr/local/bin/mockingsse
    ```
-4. Run it:
+5. Run it:
    ```bash
    mockingsse
    ```
