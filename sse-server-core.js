@@ -9,26 +9,17 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-// Store active SSE connections
-const connections = new Map(); // Map<connectionId, { url: string, response: ServerResponse, createdAt: Date }>
-
-// Store active mock timers
-const mockTimers = new Map(); // Map<connectionId, NodeJS.Timeout[]>
+const connections = new Map();
+const mockTimers = new Map();
 
 function generateConnectionId() {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
-// Get mock folder path from environment or default
 function getMockFolderPath(mockFolderPath) {
-    if (mockFolderPath) return mockFolderPath;
-    if (process.env.MOCKINGSSE_FOLDER) return process.env.MOCKINGSSE_FOLDER;
-    // Use home directory for default mock folder (works with pkg binary)
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
-    return path.join(homeDir, '.mockingsse', 'mocks');
+    return mockFolderPath || process.env.MOCKINGSSE_FOLDER || path.join(__dirname, 'mocks');
 }
 
-// Normalize URL by removing query parameters for comparison
 function normalizeUrl(urlString) {
     try {
         const url = new URL(urlString);
@@ -42,14 +33,12 @@ function normalizeUrl(urlString) {
     }
 }
 
-// Parse query parameters from URL
 function parseQueryParams(urlString) {
     try {
         const url = new URL(urlString);
         const params = {};
         url.searchParams.forEach((value, key) => {
             if (params[key]) {
-                // Multiple values for same key - convert to array
                 if (Array.isArray(params[key])) {
                     params[key].push(value);
                 } else {
@@ -61,7 +50,6 @@ function parseQueryParams(urlString) {
         });
         return params;
     } catch (error) {
-        // If not a valid URL, try manual parsing
         const queryIndex = urlString.indexOf('?');
         if (queryIndex === -1) {
             return {};
@@ -88,26 +76,21 @@ function parseQueryParams(urlString) {
     }
 }
 
-// Compare query parameters
 function compareQueryParams(mockParams, targetParams, matchAllQueries, matchQueries) {
     if (matchAllQueries) {
-        // All query parameters must match exactly
         const mockKeys = Object.keys(mockParams).sort();
         const targetKeys = Object.keys(targetParams).sort();
         
-        // Both must have the same number of query parameters
         if (mockKeys.length !== targetKeys.length) {
             return false;
         }
         
-        // All keys must match
         for (let i = 0; i < mockKeys.length; i++) {
             if (mockKeys[i] !== targetKeys[i]) {
                 return false;
             }
         }
         
-        // All values must match
         for (const key of mockKeys) {
             if (JSON.stringify(mockParams[key]) !== JSON.stringify(targetParams[key])) {
                 return false;
@@ -115,14 +98,11 @@ function compareQueryParams(mockParams, targetParams, matchAllQueries, matchQuer
         }
         return true;
     } else if (matchQueries && matchQueries.length > 0) {
-        // Only specified query parameters must match
         for (const key of matchQueries) {
-            // Both mock and target must have this parameter
             if (!(key in mockParams) || !(key in targetParams)) {
                 return false;
             }
             
-            // Values must match
             if (JSON.stringify(mockParams[key]) !== JSON.stringify(targetParams[key])) {
                 return false;
             }
@@ -130,45 +110,36 @@ function compareQueryParams(mockParams, targetParams, matchAllQueries, matchQuer
         return true;
     }
     
-    // No query matching required
     return true;
 }
 
-// Match URLs by comparing base URLs (ignoring query parameters)
 function matchUrlByBase(mockUrl, targetUrl) {
     const mockBase = normalizeUrl(mockUrl);
     const targetBase = normalizeUrl(targetUrl);
     return mockBase === targetBase;
 }
 
-// Match URLs with query parameter configuration
 function matchUrlWithConfig(mockUrl, targetUrl, matchingConfig) {
-    // First check base URL match
     if (!matchUrlByBase(mockUrl, targetUrl)) {
         return false;
     }
     
-    // If no matching config, use default behavior (ignore queries)
     if (!matchingConfig) {
         return true;
     }
     
     const { matchAllQueries, matchQueries } = matchingConfig;
     
-    // If no query matching is required, base URL match is enough
     if (!matchAllQueries && (!matchQueries || matchQueries.length === 0)) {
         return true;
     }
     
-    // Parse query parameters
     const mockParams = parseQueryParams(mockUrl);
     const targetParams = parseQueryParams(targetUrl);
     
-    // Compare query parameters based on config
     return compareQueryParams(mockParams, targetParams, matchAllQueries, matchQueries);
 }
 
-// Simple URL pattern matching (supports wildcards)
 function matchUrlPattern(pattern, url) {
     const regexPattern = pattern
         .replace(/\*/g, '.*')
@@ -177,8 +148,7 @@ function matchUrlPattern(pattern, url) {
     return regex.test(url);
 }
 
-// Find mock file for a given URL
-function findMockFile(targetUrl, mockFolderPath) {
+function findMockFile(targetUrl, scenario, mockFolderPath) {
     const rootPath = getMockFolderPath(mockFolderPath);
     const domainsPath = path.join(rootPath, 'Domains');
     
@@ -189,6 +159,8 @@ function findMockFile(targetUrl, mockFolderPath) {
     const domains = fs.readdirSync(domainsPath, { withFileTypes: true })
         .filter(dirent => dirent.isDirectory())
         .map(dirent => dirent.name);
+
+    const matchingMocks = [];
 
     for (const domain of domains) {
         const sseFolder = path.join(domainsPath, domain, 'SSE');
@@ -204,15 +176,31 @@ function findMockFile(targetUrl, mockFolderPath) {
             try {
                 const mockData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
                 
-                // Check exact match first
+                let urlMatches = false;
+                
                 if (mockData.url === targetUrl) {
-                    return { filePath, mockData };
+                    urlMatches = true;
+                } else {
+                    const matchingConfig = mockData.matching || null;
+                    if (matchUrlWithConfig(mockData.url, targetUrl, matchingConfig)) {
+                        urlMatches = true;
+                    }
                 }
                 
-                // Check with matching configuration
-                const matchingConfig = mockData.matching || null;
-                if (matchUrlWithConfig(mockData.url, targetUrl, matchingConfig)) {
-                    return { filePath, mockData };
+                if (urlMatches) {
+                    const mockScenario = mockData.scenario || null;
+                    
+                    if (scenario) {
+                        if (mockScenario && String(mockScenario) === String(scenario)) {
+                            matchingMocks.push({ filePath, mockData, hasScenario: true });
+                        }
+                    } else {
+                        if (!mockScenario) {
+                            matchingMocks.unshift({ filePath, mockData, hasScenario: false });
+                        } else {
+                            matchingMocks.push({ filePath, mockData, hasScenario: true });
+                        }
+                    }
                 }
             } catch (error) {
                 console.error(`[SSE] Error reading mock file ${file}:`, error);
@@ -220,10 +208,23 @@ function findMockFile(targetUrl, mockFolderPath) {
         }
     }
     
+    if (matchingMocks.length > 0) {
+        if (scenario) {
+            const scenarioMatch = matchingMocks.find(m => m.hasScenario);
+            if (scenarioMatch) {
+                return { filePath: scenarioMatch.filePath, mockData: scenarioMatch.mockData };
+            }
+        } else {
+            const noScenarioMatch = matchingMocks.find(m => !m.hasScenario);
+            if (noScenarioMatch) {
+                return { filePath: noScenarioMatch.filePath, mockData: noScenarioMatch.mockData };
+            }
+        }
+    }
+    
     return null;
 }
 
-// Start mock with timed responses
 function startMock(connectionId, mockData) {
     clearMockTimers(connectionId);
     
@@ -262,7 +263,6 @@ function startMock(connectionId, mockData) {
     console.log(`[SSE] Mock started for connection ${connectionId} with ${responses.length} scheduled events`);
 }
 
-// Clear mock timers for a connection
 function clearMockTimers(connectionId) {
     const timers = mockTimers.get(connectionId);
     if (timers) {
@@ -272,19 +272,17 @@ function clearMockTimers(connectionId) {
     }
 }
 
-// Check for mock and start it if found
-function checkAndStartMock(connectionId, targetUrl, mockFolderPath) {
-    const mockFile = findMockFile(targetUrl, mockFolderPath);
+function checkAndStartMock(connectionId, targetUrl, scenario, mockFolderPath) {
+    const mockFile = findMockFile(targetUrl, scenario, mockFolderPath);
     
     if (mockFile) {
-        console.log(`[SSE] Mock found for URL: ${targetUrl}, starting mock...`);
+        console.log(`[SSE] Mock found for URL: ${targetUrl}${scenario ? ` with scenario: ${scenario}` : ''}, starting mock...`);
         startMock(connectionId, mockFile.mockData);
     } else {
-        console.log(`[SSE] No mock found for URL: ${targetUrl}`);
+        console.log(`[SSE] No mock found for URL: ${targetUrl}${scenario ? ` with scenario: ${scenario}` : ''}`);
     }
 }
 
-// Send event to connection
 function sendEventToConnection(connectionId, data, statusCode = 200) {
     const connection = connections.get(connectionId);
     if (connection && connection.response) {
@@ -298,17 +296,15 @@ function sendEventToConnection(connectionId, data, statusCode = 200) {
     }
 }
 
-// Send event to URL
-function sendEventToURL(targetUrl, data, statusCode = 200) {
+function sendEventToURL(targetUrl, data) {
     const targetUrlString = String(targetUrl);
     let sentCount = 0;
 
     connections.forEach((conn, id) => {
         try {
             if (String(conn.url) === targetUrlString && conn.response) {
-                const eventData = typeof data === 'string' ? data : JSON.stringify(data);
-                const sseEvent = `event: response\ndata: {"statusCode": ${statusCode}, "body": ${eventData}}\n\n`;
-                conn.response.write(sseEvent);
+                const sseData = `data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`;
+                conn.response.write(sseData);
                 sentCount++;
             }
         } catch (error) {
@@ -319,15 +315,13 @@ function sendEventToURL(targetUrl, data, statusCode = 200) {
     console.log(`[SSE] Event sent to ${sentCount} connection(s) for URL: ${targetUrl}`);
 }
 
-// Send event to all connections
-function sendEventToAll(data, statusCode = 200) {
+function sendEventToAll(data) {
     let sentCount = 0;
 
     connections.forEach((conn, id) => {
         if (conn.response) {
-            const eventData = typeof data === 'string' ? data : JSON.stringify(data);
-            const sseEvent = `event: response\ndata: {"statusCode": ${statusCode}, "body": ${eventData}}\n\n`;
-            conn.response.write(sseEvent);
+            const sseData = `data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`;
+            conn.response.write(sseData);
             sentCount++;
         }
     });
@@ -335,23 +329,21 @@ function sendEventToAll(data, statusCode = 200) {
     console.log(`[SSE] Event sent to all ${sentCount} connection(s)`);
 }
 
-// Get all connections
 function getConnections() {
     return Array.from(connections.entries()).map(([id, conn]) => ({
         id,
         url: String(conn.url),
+        scenario: conn.scenario || null,
         createdAt: conn.createdAt.toISOString()
     }));
 }
 
-// Create SSE server
 function createSSEServer(port, mockFolderPath) {
     const server = http.createServer((req, res) => {
         const pathname = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
 
-        // CORS headers
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Headers', 'Cache-Control, X-SSE-URL, url, sse-url');
+        res.setHeader('Access-Control-Allow-Headers', 'Cache-Control, X-SSE-URL, url, sse-url, scenario, x-scenario');
 
         if (pathname === '/sse' && req.method === 'GET') {
             handleSSEConnection(req, res, mockFolderPath);
@@ -378,6 +370,7 @@ function createSSEServer(port, mockFolderPath) {
 
         const connectionId = generateConnectionId();
         const targetUrl = String(urlParam);
+        const scenario = req.headers['scenario'] || req.headers['x-scenario'] || null;
 
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
@@ -389,15 +382,21 @@ function createSSEServer(port, mockFolderPath) {
 
         res.write(': keep-alive\n\n');
 
-        connections.set(connectionId, {
+        const connectionData = {
             url: targetUrl,
             response: res,
             createdAt: new Date()
-        });
+        };
+        
+        if (scenario) {
+            connectionData.scenario = String(scenario);
+        }
 
-        console.log(`[SSE] Connection opened: ${connectionId} for URL: ${urlParam}`);
+        connections.set(connectionId, connectionData);
 
-        checkAndStartMock(connectionId, targetUrl, mockFolderPath);
+        console.log(`[SSE] Connection opened: ${connectionId} for URL: ${urlParam}${scenario ? ` with scenario: ${scenario}` : ''}`);
+
+        checkAndStartMock(connectionId, targetUrl, scenario, mockFolderPath);
 
         req.on('close', () => {
             clearMockTimers(connectionId);
@@ -464,8 +463,10 @@ function createSSEServer(port, mockFolderPath) {
                             startedCount = 1;
                         }
                     } else if (targetUrl) {
+                        // Use mock's matching configuration to find connections
+                        const matchingConfig = mockData.matching || null;
                         connections.forEach((conn, id) => {
-                            if (String(conn.url) === String(targetUrl) || matchUrlByBase(String(conn.url), targetUrl)) {
+                            if (matchUrlWithConfig(targetUrl, String(conn.url), matchingConfig)) {
                                 startMock(id, mockData);
                                 startedCount++;
                             }
@@ -480,7 +481,8 @@ function createSSEServer(port, mockFolderPath) {
                         res.end(JSON.stringify({ error: 'No matching connections found' }));
                     }
                 } else if (targetUrl) {
-                    const mockFile = findMockFile(targetUrl, mockFolderPath);
+                    const requestScenario = requestData.scenario || null;
+                    const mockFile = findMockFile(targetUrl, requestScenario, mockFolderPath);
                     if (mockFile) {
                         let startedCount = 0;
                         
@@ -490,8 +492,13 @@ function createSSEServer(port, mockFolderPath) {
                                 startedCount = 1;
                             }
                         } else {
+                            const matchingConfig = mockFile.mockData.matching || null;
+                            const mockScenario = mockFile.mockData.scenario || null;
                             connections.forEach((conn, id) => {
-                                if (matchUrlByBase(String(conn.url), targetUrl)) {
+                                const urlMatches = matchUrlWithConfig(targetUrl, String(conn.url), matchingConfig);
+                                const scenarioMatches = !mockScenario || !conn.scenario || String(mockScenario) === String(conn.scenario);
+                                
+                                if (urlMatches && scenarioMatches) {
                                     startMock(id, mockFile.mockData);
                                     startedCount++;
                                 }
@@ -536,6 +543,7 @@ module.exports = {
     sendEventToURL,
     sendEventToAll,
     findMockFile,
-    startMock
+    startMock,
+    matchUrlWithConfig
 };
 

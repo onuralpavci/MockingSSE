@@ -448,6 +448,8 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
 // Editor controls
 document.getElementById('newMockBtn').addEventListener('click', () => {
     currentMock = null;
+    // Deselect any active mock in the list
+    document.querySelectorAll('.mock-item').forEach(item => item.classList.remove('active'));
     openMockEditor();
 });
 
@@ -681,6 +683,8 @@ function addMockForConnection(url, scenario = '') {
     
     // Open new mock editor with URL and scenario pre-filled
     currentMock = null;
+    // Deselect any active mock in the list
+    document.querySelectorAll('.mock-item').forEach(item => item.classList.remove('active'));
     openMockEditor();
     
     // Set the URL and scenario fields (scenario is default from connection)
