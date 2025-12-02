@@ -21,25 +21,11 @@ function generateConnectionId() {
 
 // Get mock folder path from environment or default
 function getMockFolderPath(mockFolderPath) {
-    if (mockFolderPath) {
-        return mockFolderPath;
-    }
-    // Check environment variable (both names for compatibility)
-    if (process.env.MOCKINGSSE_FOLDER) {
-        return process.env.MOCKINGSSE_FOLDER;
-    }
-    if (process.env.MOCKINGSTAR_FOLDER) {
-        return process.env.MOCKINGSTAR_FOLDER;
-    }
-    
-    // If running as pkg executable, use home directory
-    if (process.pkg) {
-        const os = require('os');
-        return path.join(os.homedir(), '.mockingsse', 'mocks');
-    }
-    
-    // Default for development: use project directory
-    return path.join(__dirname, 'mocks');
+    if (mockFolderPath) return mockFolderPath;
+    if (process.env.MOCKINGSSE_FOLDER) return process.env.MOCKINGSSE_FOLDER;
+    // Use home directory for default mock folder (works with pkg binary)
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
+    return path.join(homeDir, '.mockingsse', 'mocks');
 }
 
 // Normalize URL by removing query parameters for comparison
@@ -251,7 +237,7 @@ function startMock(connectionId, mockData) {
     const timers = [];
     
     responses.forEach((response, index) => {
-        const { time, response: responseIndex } = response;
+        const { time, response: responseIndex, statusCode = 200 } = response;
         
         if (typeof time !== 'number' || typeof responseIndex !== 'number') {
             console.error(`[SSE] Invalid response format at index ${index}`);
@@ -265,8 +251,8 @@ function startMock(connectionId, mockData) {
         
         const timer = setTimeout(() => {
             const responseData = data[responseIndex];
-            sendEventToConnection(connectionId, JSON.stringify(responseData));
-            console.log(`[SSE] Mock event sent to connection ${connectionId} at ${time}ms (response index: ${responseIndex})`);
+            sendEventToConnection(connectionId, JSON.stringify(responseData), statusCode);
+            console.log(`[SSE] Mock event sent to connection ${connectionId} at ${time}ms (response index: ${responseIndex}, statusCode: ${statusCode})`);
         }, time);
         
         timers.push(timer);
@@ -299,27 +285,30 @@ function checkAndStartMock(connectionId, targetUrl, mockFolderPath) {
 }
 
 // Send event to connection
-function sendEventToConnection(connectionId, data) {
+function sendEventToConnection(connectionId, data, statusCode = 200) {
     const connection = connections.get(connectionId);
     if (connection && connection.response) {
-        const sseData = `data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`;
-        connection.response.write(sseData);
-        console.log(`[SSE] Event sent to connection: ${connectionId}`);
+        // Include statusCode in the SSE event
+        const eventData = typeof data === 'string' ? data : JSON.stringify(data);
+        const sseEvent = `event: response\ndata: {"statusCode": ${statusCode}, "body": ${eventData}}\n\n`;
+        connection.response.write(sseEvent);
+        console.log(`[SSE] Event sent to connection: ${connectionId} (statusCode: ${statusCode})`);
     } else {
         console.warn(`[SSE] Connection not found: ${connectionId}`);
     }
 }
 
 // Send event to URL
-function sendEventToURL(targetUrl, data) {
+function sendEventToURL(targetUrl, data, statusCode = 200) {
     const targetUrlString = String(targetUrl);
     let sentCount = 0;
 
     connections.forEach((conn, id) => {
         try {
             if (String(conn.url) === targetUrlString && conn.response) {
-                const sseData = `data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`;
-                conn.response.write(sseData);
+                const eventData = typeof data === 'string' ? data : JSON.stringify(data);
+                const sseEvent = `event: response\ndata: {"statusCode": ${statusCode}, "body": ${eventData}}\n\n`;
+                conn.response.write(sseEvent);
                 sentCount++;
             }
         } catch (error) {
@@ -331,13 +320,14 @@ function sendEventToURL(targetUrl, data) {
 }
 
 // Send event to all connections
-function sendEventToAll(data) {
+function sendEventToAll(data, statusCode = 200) {
     let sentCount = 0;
 
     connections.forEach((conn, id) => {
         if (conn.response) {
-            const sseData = `data: ${typeof data === 'string' ? data : JSON.stringify(data)}\n\n`;
-            conn.response.write(sseData);
+            const eventData = typeof data === 'string' ? data : JSON.stringify(data);
+            const sseEvent = `event: response\ndata: {"statusCode": ${statusCode}, "body": ${eventData}}\n\n`;
+            conn.response.write(sseEvent);
             sentCount++;
         }
     });
@@ -389,18 +379,7 @@ function createSSEServer(port, mockFolderPath) {
         const connectionId = generateConnectionId();
         const targetUrl = String(urlParam);
 
-        // Check for mock file to get status code
-        const mockFile = findMockFile(targetUrl, mockFolderPath);
-        let statusCode = 200; // Default status code
-        
-        if (mockFile && mockFile.mockData) {
-            // Use statusCode from mock file if available
-            if (typeof mockFile.mockData.statusCode === 'number') {
-                statusCode = mockFile.mockData.statusCode;
-            }
-        }
-
-        res.writeHead(statusCode, {
+        res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
             'Connection': 'keep-alive',
@@ -416,7 +395,7 @@ function createSSEServer(port, mockFolderPath) {
             createdAt: new Date()
         });
 
-        console.log(`[SSE] Connection opened: ${connectionId} for URL: ${urlParam} with status code: ${statusCode}`);
+        console.log(`[SSE] Connection opened: ${connectionId} for URL: ${urlParam}`);
 
         checkAndStartMock(connectionId, targetUrl, mockFolderPath);
 
@@ -545,17 +524,6 @@ function createSSEServer(port, mockFolderPath) {
     server.listen(port, () => {
         console.log(`[SSE Server] Started on port ${port}`);
         console.log(`[SSE Server] Mock folder: ${getMockFolderPath(mockFolderPath)}`);
-    });
-
-    server.on('error', (error) => {
-        if (error.code === 'EADDRINUSE') {
-            console.error(`[SSE Server] Error: Port ${port} is already in use.`);
-            console.error(`[SSE Server] Please stop the process using this port or use a different port.`);
-            console.error(`[SSE Server] To find the process: lsof -ti:${port}`);
-        } else {
-            console.error(`[SSE Server] Error:`, error);
-        }
-        process.exit(1);
     });
 
     return server;

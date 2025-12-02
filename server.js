@@ -33,22 +33,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Get mock folder path
 function getMockFolderPath() {
-    // Check environment variable (both names for compatibility)
     if (process.env.MOCKINGSSE_FOLDER) {
         return process.env.MOCKINGSSE_FOLDER;
     }
-    if (process.env.MOCKINGSTAR_FOLDER) {
-        return process.env.MOCKINGSTAR_FOLDER;
-    }
-    
-    // If running as pkg executable, use home directory (can't write to snapshot)
-    if (process.pkg) {
-        const os = require('os');
-        return path.join(os.homedir(), '.mockingsse', 'mocks');
-    }
-    
-    // Default for development: use project directory
-    return path.join(__dirname, 'mocks');
+    // Use home directory for default mock folder (works with pkg binary)
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
+    return path.join(homeDir, '.mockingsse', 'mocks');
 }
 
 // Ensure mocks directory exists
@@ -93,7 +83,6 @@ app.get('/api/mocks', (req, res) => {
                     filePath: filePath,
                     fileName: file,
                     url: mockData.url,
-                    statusCode: mockData.statusCode || 200,
                     matching: mockData.matching || null,
                     responses: mockData.responses || [],
                     data: mockData.data || []
@@ -146,7 +135,7 @@ app.get('/api/mocks/:id', (req, res) => {
 
 // Create or update mock file
 app.post('/api/mocks', (req, res) => {
-    const { url, responses, data, domain = 'Dev', matching, statusCode } = req.body;
+    const { url, responses, data, domain = 'Dev', matching } = req.body;
     
     if (!url || !responses || !data) {
         return res.status(400).json({ error: 'Missing required fields: url, responses, data' });
@@ -172,7 +161,6 @@ app.post('/api/mocks', (req, res) => {
     const mockData = {
         url,
         matching: matching || null,
-        statusCode: statusCode || 200,
         responses,
         data
     };
@@ -213,7 +201,6 @@ app.put('/api/mocks/:id', (req, res) => {
     const mockData = {
         url: url || existingMock.url,
         matching: matching !== undefined ? matching : (existingMock.matching || null),
-        statusCode: statusCode !== undefined ? (statusCode || 200) : (existingMock.statusCode || 200),
         responses: responses || [],
         data: data || []
     };
@@ -326,22 +313,12 @@ function matchUrlByBase(mockUrl, targetUrl) {
 }
 
 // Start API server
-const apiServer = app.listen(API_PORT, () => {
+app.listen(API_PORT, () => {
     console.log(`[API Server] Started on port ${API_PORT}`);
     console.log(`[API Server] Web UI: http://localhost:${API_PORT}`);
 });
 
-apiServer.on('error', (error) => {
-    if (error.code === 'EADDRINUSE') {
-        console.error(`[API Server] Error: Port ${API_PORT} is already in use.`);
-        console.error(`[API Server] Please stop the process using this port or use a different port.`);
-        console.error(`[API Server] To find the process: lsof -ti:${API_PORT}`);
-    } else {
-        console.error(`[API Server] Error:`, error);
-    }
-    process.exit(1);
-});
-
 // Start SSE server
 const sseServer = createSSEServer(SSE_PORT, getMockFolderPath());
+console.log(`[SSE Server] Started on port ${SSE_PORT}`);
 

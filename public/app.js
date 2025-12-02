@@ -150,7 +150,6 @@ function openMockEditor(mock = null) {
         document.getElementById('mockUrl').value = mock.url;
         document.getElementById('mockDomain').value = mock.domain || 'Dev';
         document.getElementById('mockScenario').value = mock.scenario || '';
-        document.getElementById('mockStatusCode').value = mock.statusCode || 200;
         
         // Load matching configuration
         if (mock.matching) {
@@ -172,7 +171,7 @@ function openMockEditor(mock = null) {
         const timelineContainer = document.getElementById('timelineContainer');
         timelineContainer.innerHTML = '';
         mock.responses.forEach((response, index) => {
-            addTimelineItem(response.time, response.response, mock.data.length, index);
+            addTimelineItem(response.time, response.response, mock.data.length, index, response.statusCode || 200);
         });
         
         // Show delete and duplicate buttons
@@ -184,7 +183,6 @@ function openMockEditor(mock = null) {
         document.getElementById('matchAllQueries').checked = false;
         document.getElementById('matchQueries').value = '';
         document.getElementById('mockScenario').value = '';
-        document.getElementById('mockStatusCode').value = 200;
         document.getElementById('responsesContainer').innerHTML = `
             <div class="response-item">
                 <div class="response-header">
@@ -204,6 +202,20 @@ function openMockEditor(mock = null) {
                     <label>Response</label>
                     <select class="timeline-response-select">
                         <option value="0">Response 1</option>
+                    </select>
+                </div>
+                <div class="timeline-status">
+                    <label>Status Code</label>
+                    <select class="timeline-status-select">
+                        <option value="200">200 OK</option>
+                        <option value="201">201 Created</option>
+                        <option value="400">400 Bad Request</option>
+                        <option value="401">401 Unauthorized</option>
+                        <option value="403">403 Forbidden</option>
+                        <option value="404">404 Not Found</option>
+                        <option value="500">500 Internal Server Error</option>
+                        <option value="502">502 Bad Gateway</option>
+                        <option value="503">503 Service Unavailable</option>
                     </select>
                 </div>
                 <button type="button" class="btn-remove-timeline">Remove</button>
@@ -243,7 +255,7 @@ function attachEditorListeners() {
     document.getElementById('addTimelineBtn').onclick = () => {
         const container = document.getElementById('timelineContainer');
         const responseCount = document.getElementById('responsesContainer').children.length;
-        addTimelineItem(0, 0, responseCount, container.children.length);
+        addTimelineItem(0, 0, responseCount, container.children.length, 200);
     };
     
     // Remove timeline buttons
@@ -275,7 +287,7 @@ function addResponseItem(data, index) {
     };
 }
 
-function addTimelineItem(time, responseIndex, responseCount, index) {
+function addTimelineItem(time, responseIndex, responseCount, index, statusCode = 200) {
     const container = document.getElementById('timelineContainer');
     const item = document.createElement('div');
     item.className = 'timeline-item';
@@ -283,6 +295,18 @@ function addTimelineItem(time, responseIndex, responseCount, index) {
     const options = Array.from({ length: responseCount }, (_, i) => 
         `<option value="${i}" ${i === responseIndex ? 'selected' : ''}>Response ${i + 1}</option>`
     ).join('');
+    
+    const statusOptions = [
+        { value: 200, label: '200 OK' },
+        { value: 201, label: '201 Created' },
+        { value: 400, label: '400 Bad Request' },
+        { value: 401, label: '401 Unauthorized' },
+        { value: 403, label: '403 Forbidden' },
+        { value: 404, label: '404 Not Found' },
+        { value: 500, label: '500 Internal Server Error' },
+        { value: 502, label: '502 Bad Gateway' },
+        { value: 503, label: '503 Service Unavailable' }
+    ].map(opt => `<option value="${opt.value}" ${opt.value == statusCode ? 'selected' : ''}>${opt.label}</option>`).join('');
     
     item.innerHTML = `
         <div class="timeline-time">
@@ -293,6 +317,12 @@ function addTimelineItem(time, responseIndex, responseCount, index) {
             <label>Response</label>
             <select class="timeline-response-select">
                 ${options}
+            </select>
+        </div>
+        <div class="timeline-status">
+            <label>Status Code</label>
+            <select class="timeline-status-select">
+                ${statusOptions}
             </select>
         </div>
         <button type="button" class="btn-remove-timeline">Remove</button>
@@ -327,7 +357,6 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
     const url = document.getElementById('mockUrl').value;
     const domain = document.getElementById('mockDomain').value;
     const scenario = document.getElementById('mockScenario').value.trim() || null;
-    const statusCode = parseInt(document.getElementById('mockStatusCode').value) || 200;
     
     // Collect matching configuration
     const matchAllQueries = document.getElementById('matchAllQueries').checked;
@@ -364,7 +393,8 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
     document.querySelectorAll('.timeline-item').forEach(item => {
         const time = parseInt(item.querySelector('.timeline-time-input').value);
         const responseIndex = parseInt(item.querySelector('.timeline-response-select').value);
-        timeline.push({ time, response: responseIndex });
+        const statusCode = parseInt(item.querySelector('.timeline-status-select').value);
+        timeline.push({ time, response: responseIndex, statusCode });
     });
     
     if (timeline.length === 0) {
@@ -379,7 +409,6 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
         url,
         domain,
         scenario: scenario,
-        statusCode: statusCode,
         matching: matching,
         responses: timeline,
         data: parsedResponses
@@ -844,7 +873,6 @@ async function duplicateMockByScenario(mock, newScenario) {
         const domain = mock.domain || 'Dev';
         const scenario = newScenario;
         const matching = mock.matching || null;
-        const statusCode = mock.statusCode || 200;
         const responses = mock.responses || [];
         const data = mock.data || [];
         
@@ -852,7 +880,6 @@ async function duplicateMockByScenario(mock, newScenario) {
             url,
             domain,
             scenario: scenario,
-            statusCode: statusCode,
             matching: matching,
             responses: responses,
             data: data

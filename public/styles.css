@@ -424,7 +424,7 @@ header h1 {
 
 .timeline-item {
     display: grid;
-    grid-template-columns: 150px 1fr auto;
+    grid-template-columns: 150px 1fr 120px auto;
     gap: 15px;
     align-items: end;
     padding: 15px;
@@ -433,7 +433,8 @@ header h1 {
 }
 
 .timeline-time,
-.timeline-response {
+.timeline-response,
+.timeline-status {
     display: flex;
     flex-direction: column;
 }
@@ -445,11 +446,17 @@ header h1 {
 }
 
 .timeline-time-input,
-.timeline-response-select {
+.timeline-response-select,
+.timeline-status-select {
     width: 100%;
     padding: 8px;
     border: 2px solid #e0e0e0;
     border-radius: 4px;
+}
+
+.timeline-status label {
+    margin-bottom: 5px;
+    font-size: 12px;
 }
 
 .btn-remove-timeline {

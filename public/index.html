@@ -64,12 +64,6 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="mockStatusCode">HTTP Status Code (Optional)</label>
-                                <input type="number" id="mockStatusCode" placeholder="200" min="100" max="599" value="200">
-                                <small style="color: #666; font-size: 12px; font-style: italic;">HTTP status code to return when SSE connection is established. Default: 200</small>
-                            </div>
-
-                            <div class="form-group">
                                 <label>URL Matching Configuration</label>
                                 <div class="matching-config">
                                     <div class="matching-option">
@@ -113,6 +107,20 @@
                                             <label>Response</label>
                                             <select class="timeline-response-select">
                                                 <option value="0">Response 1</option>
+                                            </select>
+                                        </div>
+                                        <div class="timeline-status">
+                                            <label>Status Code</label>
+                                            <select class="timeline-status-select">
+                                                <option value="200">200 OK</option>
+                                                <option value="201">201 Created</option>
+                                                <option value="400">400 Bad Request</option>
+                                                <option value="401">401 Unauthorized</option>
+                                                <option value="403">403 Forbidden</option>
+                                                <option value="404">404 Not Found</option>
+                                                <option value="500">500 Internal Server Error</option>
+                                                <option value="502">502 Bad Gateway</option>
+                                                <option value="503">503 Service Unavailable</option>
                                             </select>
                                         </div>
                                         <button type="button" class="btn-remove-timeline">Remove</button>
