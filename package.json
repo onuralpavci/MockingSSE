@@ -12,6 +12,8 @@
     "build": "pkg . --targets ${PKG_TARGET:-node18-macos-arm64} --out-path bin",
     "build:mac": "pkg . --targets node18-macos-x64 --out-path bin",
     "build:mac-arm": "pkg . --targets node18-macos-arm64 --out-path bin",
+    "build:linux": "pkg . --targets node18-linux-x64 --out-path bin",
+    "build:x64": "pkg . --targets node18-macos-x64,node18-linux-x64 --out-path bin",
     "build:all": "pkg . --targets node18-macos-x64,node18-macos-arm64,node18-linux-x64,node18-win-x64 --out-path bin"
   },
   "keywords": ["sse", "mock", "server-sent-events"],

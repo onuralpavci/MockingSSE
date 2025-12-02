@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 /**
  * MockingSSE Server
  * Combined SSE server and API server for web UI
@@ -12,6 +14,7 @@ const path = require('path');
 const SSE_PORT = 8009;
 const API_PORT = 8010;
 
+// Import SSE server functionality
 const { 
     createSSEServer, 
     getConnections, 
@@ -19,87 +22,47 @@ const {
     sendEventToURL, 
     sendEventToAll,
     findMockFile,
-    startMock,
-    matchUrlWithConfig
+    startMock
 } = require('./sse-server-core');
 
+// Express app for API
 const app = express();
 app.use(cors());
 app.use(express.json());
-let publicPath;
-if (process.pkg) {
-    const execDir = path.dirname(process.execPath);
-    const publicInExecDir = path.join(execDir, 'public');
-    
-    if (fs.existsSync(publicInExecDir)) {
-        publicPath = publicInExecDir;
-    } else {
-        publicPath = path.join(__dirname, 'public');
-    }
-} else {
-    publicPath = path.join(__dirname, 'public');
-}
+app.use(express.static(path.join(__dirname, 'public')));
 
-console.log(`[Server] Serving static files from: ${publicPath}`);
-app.use(express.static(publicPath));
-
-app.get('/', (req, res) => {
-    const indexPath = path.join(publicPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-    } else {
-        res.status(404).send('index.html not found');
-    }
-});
-
+// Get mock folder path
 function getMockFolderPath() {
+    // Check environment variable (both names for compatibility)
     if (process.env.MOCKINGSSE_FOLDER) {
-        const expandedPath = process.env.MOCKINGSSE_FOLDER.startsWith('~/') || process.env.MOCKINGSSE_FOLDER === '~' 
-            ? path.join(require('os').homedir(), process.env.MOCKINGSSE_FOLDER.slice(1))
-            : process.env.MOCKINGSSE_FOLDER;
-        console.log(`[Server] Using mock folder: ${expandedPath}`);
-        return expandedPath;
+        return process.env.MOCKINGSSE_FOLDER;
+    }
+    if (process.env.MOCKINGSTAR_FOLDER) {
+        return process.env.MOCKINGSTAR_FOLDER;
     }
     
+    // If running as pkg executable, use home directory (can't write to snapshot)
     if (process.pkg) {
-        const execDir = path.dirname(process.execPath);
-        const mocksInExecDir = path.join(execDir, 'mocks');
-        try {
-            if (!fs.existsSync(mocksInExecDir)) {
-                fs.mkdirSync(mocksInExecDir, { recursive: true });
-            }
-            console.log(`[Server] Using executable directory: ${mocksInExecDir}`);
-            return mocksInExecDir;
-        } catch (error) {
-            const homeDir = require('os').homedir();
-            const fallbackPath = path.join(homeDir, '.mockingsse', 'mocks');
-            console.log(`[Server] Using home directory fallback: ${fallbackPath}`);
-            return fallbackPath;
-        }
+        const os = require('os');
+        return path.join(os.homedir(), '.mockingsse', 'mocks');
     }
     
-    const defaultPath = path.join(__dirname, 'mocks');
-    console.log(`[Server] Using default path: ${defaultPath}`);
-    return defaultPath;
+    // Default for development: use project directory
+    return path.join(__dirname, 'mocks');
 }
 
-function ensureMocksDirectory() {
-    const mocksDir = getMockFolderPath();
-    if (!fs.existsSync(mocksDir)) {
-        try {
-            fs.mkdirSync(mocksDir, { recursive: true });
-            fs.mkdirSync(path.join(mocksDir, 'Domains'), { recursive: true });
-            fs.mkdirSync(path.join(mocksDir, 'Domains', 'Dev'), { recursive: true });
-            fs.mkdirSync(path.join(mocksDir, 'Domains', 'Dev', 'SSE'), { recursive: true });
-        } catch (error) {
-            console.error(`[Error] Cannot create mocks directory at ${mocksDir}:`, error.message);
-            console.error(`[Info] Please create the directory manually or set MOCKINGSSE_FOLDER environment variable`);
-        }
-    }
+// Ensure mocks directory exists
+const mocksDir = getMockFolderPath();
+if (!fs.existsSync(mocksDir)) {
+    fs.mkdirSync(mocksDir, { recursive: true });
+    fs.mkdirSync(path.join(mocksDir, 'Domains'), { recursive: true });
+    fs.mkdirSync(path.join(mocksDir, 'Domains', 'Dev'), { recursive: true });
+    fs.mkdirSync(path.join(mocksDir, 'Domains', 'Dev', 'SSE'), { recursive: true });
 }
 
-ensureMocksDirectory();
+// API Routes
 
+// Get all mock files
 app.get('/api/mocks', (req, res) => {
     const mocksDir = getMockFolderPath();
     const domainsPath = path.join(mocksDir, 'Domains');
@@ -130,7 +93,7 @@ app.get('/api/mocks', (req, res) => {
                     filePath: filePath,
                     fileName: file,
                     url: mockData.url,
-                    scenario: mockData.scenario || null,
+                    statusCode: mockData.statusCode || 200,
                     matching: mockData.matching || null,
                     responses: mockData.responses || [],
                     data: mockData.data || []
@@ -144,6 +107,7 @@ app.get('/api/mocks', (req, res) => {
     res.json(mocks);
 });
 
+// Get single mock file
 app.get('/api/mocks/:id', (req, res) => {
     const mocksDir = getMockFolderPath();
     const domainsPath = path.join(mocksDir, 'Domains');
@@ -180,8 +144,9 @@ app.get('/api/mocks/:id', (req, res) => {
     res.status(404).json({ error: 'Mock not found' });
 });
 
+// Create or update mock file
 app.post('/api/mocks', (req, res) => {
-    const { url, responses, data, domain = 'Dev', matching, scenario } = req.body;
+    const { url, responses, data, domain = 'Dev', matching, statusCode } = req.body;
     
     if (!url || !responses || !data) {
         return res.status(400).json({ error: 'Missing required fields: url, responses, data' });
@@ -191,6 +156,7 @@ app.post('/api/mocks', (req, res) => {
     const domainPath = path.join(mocksDir, 'Domains', domain);
     const sseFolder = path.join(domainPath, 'SSE');
     
+    // Ensure directories exist
     if (!fs.existsSync(domainPath)) {
         fs.mkdirSync(domainPath, { recursive: true });
     }
@@ -198,25 +164,23 @@ app.post('/api/mocks', (req, res) => {
         fs.mkdirSync(sseFolder, { recursive: true });
     }
 
+    // Generate filename from URL
     const urlHash = Buffer.from(url).toString('base64').replace(/[/+=]/g, '').substring(0, 20);
-    const scenarioHash = scenario ? Buffer.from(scenario).toString('base64').replace(/[/+=]/g, '').substring(0, 10) : '';
-    const fileName = scenarioHash ? `${urlHash}_${scenarioHash}.json` : `${urlHash}.json`;
+    const fileName = `${urlHash}.json`;
     const filePath = path.join(sseFolder, fileName);
 
     const mockData = {
         url,
         matching: matching || null,
-        scenario: scenario || null,
+        statusCode: statusCode || 200,
         responses,
         data
     };
 
     try {
-        const fileId = scenarioHash ? `${urlHash}_${scenarioHash}` : urlHash;
-        
         fs.writeFileSync(filePath, JSON.stringify(mockData, null, 2));
         res.json({
-            id: fileId,
+            id: urlHash,
             domain,
             filePath: filePath,
             fileName: fileName,
@@ -227,8 +191,9 @@ app.post('/api/mocks', (req, res) => {
     }
 });
 
+// Update mock file
 app.put('/api/mocks/:id', (req, res) => {
-    const { url, responses, data, domain = 'Dev', matching, scenario } = req.body;
+    const { url, responses, data, domain = 'Dev', matching } = req.body;
     
     const mocksDir = getMockFolderPath();
     const sseFolder = path.join(mocksDir, 'Domains', domain, 'SSE');
@@ -248,7 +213,7 @@ app.put('/api/mocks/:id', (req, res) => {
     const mockData = {
         url: url || existingMock.url,
         matching: matching !== undefined ? matching : (existingMock.matching || null),
-        scenario: scenario !== undefined ? scenario : (existingMock.scenario || null),
+        statusCode: statusCode !== undefined ? (statusCode || 200) : (existingMock.statusCode || 200),
         responses: responses || [],
         data: data || []
     };
@@ -267,6 +232,7 @@ app.put('/api/mocks/:id', (req, res) => {
     }
 });
 
+// Delete mock file
 app.delete('/api/mocks/:id', (req, res) => {
     const { domain = 'Dev' } = req.query;
     const mocksDir = getMockFolderPath();
@@ -285,16 +251,19 @@ app.delete('/api/mocks/:id', (req, res) => {
     }
 });
 
+// Get active SSE connections
 app.get('/api/connections', (req, res) => {
     const connections = getConnections();
     res.json(connections);
 });
 
+// Start mock for connection(s)
 app.post('/api/mocks/:id/start', (req, res) => {
     const { connectionId, url } = req.body;
     const mocksDir = getMockFolderPath();
     const domainsPath = path.join(mocksDir, 'Domains');
     
+    // Find mock file
     const domains = fs.readdirSync(domainsPath, { withFileTypes: true })
         .filter(dirent => dirent.isDirectory())
         .map(dirent => dirent.name);
@@ -312,15 +281,11 @@ app.post('/api/mocks/:id/start', (req, res) => {
                     startMock(connectionId, mockData);
                     return res.json({ success: true, message: 'Mock started for connection' });
                 } else if (url) {
+                    // Find all connections matching URL and start mock
                     const connections = getConnections();
-                    const matchingConfig = mockData.matching || null;
-                    const mockScenario = mockData.scenario || null;
                     let startedCount = 0;
                     connections.forEach(conn => {
-                        const urlMatches = matchUrlWithConfig(url, conn.url, matchingConfig);
-                        const scenarioMatches = !mockScenario || !conn.scenario || String(mockScenario) === String(conn.scenario);
-                        
-                        if (urlMatches && scenarioMatches) {
+                        if (conn.url === url || matchUrlByBase(conn.url, url)) {
                             startMock(conn.id, mockData);
                             startedCount++;
                         }
@@ -341,11 +306,42 @@ app.post('/api/mocks/:id/start', (req, res) => {
     res.status(404).json({ error: 'Mock not found' });
 });
 
-app.listen(API_PORT, () => {
+// Helper function for URL matching
+function matchUrlByBase(mockUrl, targetUrl) {
+    function normalizeUrl(urlString) {
+        try {
+            const url = new URL(urlString);
+            return `${url.protocol}//${url.host}${url.pathname}`;
+        } catch (error) {
+            const queryIndex = urlString.indexOf('?');
+            if (queryIndex !== -1) {
+                return urlString.substring(0, queryIndex);
+            }
+            return urlString;
+        }
+    }
+    const mockBase = normalizeUrl(mockUrl);
+    const targetBase = normalizeUrl(targetUrl);
+    return mockBase === targetBase;
+}
+
+// Start API server
+const apiServer = app.listen(API_PORT, () => {
     console.log(`[API Server] Started on port ${API_PORT}`);
     console.log(`[API Server] Web UI: http://localhost:${API_PORT}`);
 });
 
+apiServer.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        console.error(`[API Server] Error: Port ${API_PORT} is already in use.`);
+        console.error(`[API Server] Please stop the process using this port or use a different port.`);
+        console.error(`[API Server] To find the process: lsof -ti:${API_PORT}`);
+    } else {
+        console.error(`[API Server] Error:`, error);
+    }
+    process.exit(1);
+});
+
+// Start SSE server
 const sseServer = createSSEServer(SSE_PORT, getMockFolderPath());
-console.log(`[SSE Server] Started on port ${SSE_PORT}`);
 

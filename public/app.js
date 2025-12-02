@@ -150,6 +150,7 @@ function openMockEditor(mock = null) {
         document.getElementById('mockUrl').value = mock.url;
         document.getElementById('mockDomain').value = mock.domain || 'Dev';
         document.getElementById('mockScenario').value = mock.scenario || '';
+        document.getElementById('mockStatusCode').value = mock.statusCode || 200;
         
         // Load matching configuration
         if (mock.matching) {
@@ -183,6 +184,7 @@ function openMockEditor(mock = null) {
         document.getElementById('matchAllQueries').checked = false;
         document.getElementById('matchQueries').value = '';
         document.getElementById('mockScenario').value = '';
+        document.getElementById('mockStatusCode').value = 200;
         document.getElementById('responsesContainer').innerHTML = `
             <div class="response-item">
                 <div class="response-header">
@@ -325,6 +327,7 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
     const url = document.getElementById('mockUrl').value;
     const domain = document.getElementById('mockDomain').value;
     const scenario = document.getElementById('mockScenario').value.trim() || null;
+    const statusCode = parseInt(document.getElementById('mockStatusCode').value) || 200;
     
     // Collect matching configuration
     const matchAllQueries = document.getElementById('matchAllQueries').checked;
@@ -376,6 +379,7 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
         url,
         domain,
         scenario: scenario,
+        statusCode: statusCode,
         matching: matching,
         responses: timeline,
         data: parsedResponses
@@ -840,6 +844,7 @@ async function duplicateMockByScenario(mock, newScenario) {
         const domain = mock.domain || 'Dev';
         const scenario = newScenario;
         const matching = mock.matching || null;
+        const statusCode = mock.statusCode || 200;
         const responses = mock.responses || [];
         const data = mock.data || [];
         
@@ -847,6 +852,7 @@ async function duplicateMockByScenario(mock, newScenario) {
             url,
             domain,
             scenario: scenario,
+            statusCode: statusCode,
             matching: matching,
             responses: responses,
             data: data
