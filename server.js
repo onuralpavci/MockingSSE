@@ -8,6 +8,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const SSE_PORT = 8009;
 const API_PORT = 8010;
@@ -198,8 +199,8 @@ app.post('/api/mocks', (req, res) => {
         fs.mkdirSync(sseFolder, { recursive: true });
     }
 
-    const urlHash = Buffer.from(url).toString('base64').replace(/[/+=]/g, '').substring(0, 20);
-    const scenarioHash = scenario ? Buffer.from(scenario).toString('base64').replace(/[/+=]/g, '').substring(0, 10) : '';
+    const urlHash = crypto.createHash('sha256').update(url).digest('hex').substring(0, 16);
+    const scenarioHash = scenario ? crypto.createHash('sha256').update(scenario).digest('hex').substring(0, 8) : '';
     const fileName = scenarioHash ? `${urlHash}_${scenarioHash}.json` : `${urlHash}.json`;
     const filePath = path.join(sseFolder, fileName);
 
