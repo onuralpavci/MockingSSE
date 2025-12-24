@@ -203,6 +203,14 @@ app.post('/api/mocks', (req, res) => {
     const fileName = scenarioHash ? `${urlHash}_${scenarioHash}.json` : `${urlHash}.json`;
     const filePath = path.join(sseFolder, fileName);
 
+    // Check if file already exists - prevent overwriting existing mocks
+    if (fs.existsSync(filePath)) {
+        return res.status(409).json({ 
+            error: 'A mock with this URL' + (scenario ? ' and scenario' : '') + ' already exists. Please edit the existing mock or use a different scenario.',
+            existingMockId: scenarioHash ? `${urlHash}_${scenarioHash}` : urlHash
+        });
+    }
+
     const mockData = {
         url,
         matching: matching || null,
