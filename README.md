@@ -1,270 +1,180 @@
 # MockingSSE
 
-A standalone SSE (Server-Sent Events) mock server with a web-based UI for managing mocks, responses, and timelines.
+A standalone SSE (Server-Sent Events) mock server with a web-based UI. Perfect for testing SSE integrations without a real backend.
+
+## Quick Start
+
+### 1. Download
+
+Download the latest release for your platform from [Releases](https://github.com/onuralpavci/MockingSSE/releases):
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `mockingsse-macos-arm64.tar.gz` |
+| macOS (Intel) | `mockingsse-macos-x64.tar.gz` |
+| Linux | `mockingsse-linux-x64.tar.gz` |
+| Windows | `mockingsse-windows-x64.zip` |
+
+### 2. Extract & Run
+
+```bash
+# macOS/Linux
+tar -xzf mockingsse-macos-arm64.tar.gz
+chmod +x mockingsse
+
+# Run with your mock folder
+./mockingsse -mp /path/to/your/mocks
+```
+
+```powershell
+# Windows
+unzip mockingsse-windows-x64.zip
+mockingsse.exe -mp C:\path\to\your\mocks
+```
+
+### 3. Open Web UI
+
+Navigate to **http://localhost:8010** in your browser.
+
+---
 
 ## Features
 
-- **SSE Server**: Handles SSE connections on port 8009
-- **Web UI**: Modern web interface for managing mocks (port 8010)
-- **Mock Management**: Create, edit, and delete SSE mocks
-- **Timeline Configuration**: Schedule responses at specific times
-- **Active Connections**: View and manage active SSE connections
-- **Auto-start Mocks**: Automatically start mocks when connections match URLs
+- **🎯 Mock SSE Responses** - Create mock responses with custom timelines
+- **🖥️ Web UI** - Modern interface to manage mocks and view connections
+- **📡 Real SSE Logging** - Capture and view real server responses (SSE Logs page)
+- **⚡ Auto-start Mocks** - Automatically start mocks when URLs match
+- **🎭 Scenario Support** - Create different mocks for the same URL with scenarios
+- **📊 Status Codes** - Configure custom HTTP status codes for each response
 
-## Installation
-
-### Option 1: Install from Source
+## CLI Usage
 
 ```bash
-cd ~/Documents/Github/MockingSSE
-npm install
+# Start with mock folder path
+mockingsse -mp /path/to/mocks
+mockingsse --mockPath /path/to/mocks
+
+# Show help
+mockingsse -h
+mockingsse --help
 ```
 
-### Option 2: Use Pre-built Executable
+**Ports:**
+- `8009` - SSE Server (for client connections)
+- `8010` - Web UI & API
 
-Download the pre-built executable for your platform from the releases page.
+## Web UI
 
-## Usage
+### Mocks Tab
+Create and manage your SSE mocks:
+- Define SSE URLs to intercept
+- Add multiple response payloads
+- Configure timeline (when each response is sent)
+- Set HTTP status codes per response
+- Use scenarios for different test cases
 
-### Start the Server
+### Active Connections Tab
+View all active SSE connections and:
+- See connected URLs
+- Manually trigger mocks
+- Create new mocks from active connections
 
-#### Using Node.js (Development)
+### SSE Logs Page
+View real responses from actual SSE servers:
+- Automatically captures responses when proxying
+- Copy responses with one click
+- Use for debugging and creating accurate mocks
+
+## How It Works
+
+1. Your app connects to MockingSSE instead of the real SSE server
+2. MockingSSE reads the `X-SSE-URL` header to know the original target
+3. If a mock exists for that URL, it sends mock responses on schedule
+4. Optionally, MockingSSE also connects to the real server and logs responses
+
+### Example Client Request
 
 ```bash
-# Start the server (defaults to ./mocks)
-npm start
-```
-
-Or directly:
-
-```bash
-node server.js
-```
-
-#### Using Executable (Production)
-
-```bash
-# Option 1: Use -mp/--mockPath CLI parameter
-./bin/mockingsse -mp /path/to/your/mocks
-./bin/mockingsse --mockPath /path/to/your/mocks
-
-# Option 2: If installed globally
-mockingsse -mp /path/to/your/mocks
-
-# Option 3: Show help
-./bin/mockingsse -h
-./bin/mockingsse --help
-```
-
-**CLI Parameters:**
-- `-mp, --mockPath <path>`: Set the mock folder path
-- `-h, --help`: Show help message
-
-**Default Behavior:**
-- If `-mp/--mockPath` is provided, uses that path
-- If running as executable, uses `~/.mockingsse/mocks` or executable directory
-- Otherwise, uses `./mocks` in the project directory
-
-The server will start:
-- **SSE Server**: `http://localhost:8009`
-- **Web UI**: `http://localhost:8010`
-
-### Access the Web UI
-
-Open your browser and navigate to:
-```
-http://localhost:8010
+curl -N -H "Accept: text/event-stream" \
+  -H "X-SSE-URL: https://api.example.com/events/stream" \
+  "http://localhost:8009/sse"
 ```
 
 ## Mock File Structure
 
-Mocks are stored in `Domains/{domain}/SSE/` directories. Each mock file is a JSON file with the following structure:
+Mocks are stored as JSON files in `{mockPath}/Domains/{domain}/SSE/`:
 
 ```json
 {
-  "url": "https://example.com/sse/stream",
+  "url": "https://api.example.com/events/stream",
+  "scenario": "success-case",
   "responses": [
-    {
-      "time": 1000,
-      "response": 0
-    },
-    {
-      "time": 2000,
-      "response": 1
-    }
+    { "time": 0, "response": 0, "statusCode": 200 },
+    { "time": 1000, "response": 1, "statusCode": 200 }
   ],
   "data": [
-    {
-      "key": "value1"
-    },
-    {
-      "key": "value2"
-    }
+    { "event": "connected", "status": "ok" },
+    { "event": "update", "value": 42 }
   ]
 }
 ```
 
-- `url`: The SSE URL to match
-- `responses`: Array of timeline events with `time` (milliseconds) and `response` (index into `data` array)
-- `data`: Array of response data objects
+## macOS Gatekeeper Warning
 
-## API Endpoints
-
-### SSE Endpoints (Port 8009)
-
-- `GET /sse` - Open SSE connection (requires `X-SSE-URL` header)
-- `POST /sse/event` - Send event to connections
-- `GET /sse/event` - List active connections
-- `POST /sse/mock` - Start mock manually
-
-### Web API Endpoints (Port 8010)
-
-- `GET /api/mocks` - Get all mocks
-- `GET /api/mocks/:id` - Get single mock
-- `POST /api/mocks` - Create new mock
-- `PUT /api/mocks/:id` - Update mock
-- `DELETE /api/mocks/:id` - Delete mock
-- `GET /api/connections` - Get active connections
-- `POST /api/mocks/:id/start` - Start mock for connection(s)
-
-## Example: Creating a Mock via Web UI
-
-1. Open `http://localhost:8010`
-2. Click "New Mock"
-3. Enter the SSE URL
-4. Add responses (JSON objects)
-5. Configure timeline (when each response should be sent)
-6. Save the mock
-
-## Example: Testing SSE Connection
+If you see "Apple could not verify" warning:
 
 ```bash
-curl -N -H "Accept: text/event-stream" \
-  -H "X-SSE-URL: https://example.com/sse/stream" \
-  "http://localhost:8009/sse"
+# Remove quarantine flag
+xattr -d com.apple.quarantine mockingsse
 ```
 
-## Building Executable
+Or: System Preferences → Security & Privacy → Click "Open Anyway"
 
-To build a standalone executable that doesn't require Node.js to be installed:
-
-### Prerequisites
+## Development
 
 ```bash
+# Clone and install
+git clone https://github.com/onuralpavci/MockingSSE.git
+cd MockingSSE
 npm install
+
+# Run with Node.js
+node server.js
+
+# Or with environment variable for mock path
+MOCKINGSSE_FOLDER=/path/to/mocks node server.js
 ```
 
-### Build for macOS
+### Building Executables
 
 ```bash
-# Build for Intel Macs (x64)
-npm run build:mac
-
-# Build for Apple Silicon Macs (ARM64)
-npm run build:mac-arm
-
-# Build for both architectures
-npm run build
+npm run build        # Build for current platform
+npm run build:all    # Build for all platforms
 ```
 
-### Build for All Platforms
+## API Reference
 
-```bash
-npm run build:all
-```
+### SSE Server (Port 8009)
 
-The executables will be created in the `bin/` directory:
-- `bin/mockingsse-macos-x64` - macOS Intel
-- `bin/mockingsse-macos-arm64` - macOS Apple Silicon
-- `bin/mockingsse-linux-x64` - Linux
-- `bin/mockingsse-win-x64.exe` - Windows
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/sse` | GET | Open SSE connection (requires `X-SSE-URL` header) |
+| `/sse/event` | POST | Send event to connections |
+| `/sse/event` | GET | List active connections |
 
-### Using the Executable
+### Web API (Port 8010)
 
-1. Download or build the executable for your platform
-2. Make it executable (macOS/Linux):
-   ```bash
-   chmod +x bin/mockingsse-macos-arm64
-   ```
-3. **macOS Gatekeeper Warning**: If you see "Apple could not verify" warning on macOS:
-   - **Option 1** (Recommended): Remove quarantine flag:
-     ```bash
-     xattr -d com.apple.quarantine bin/mockingsse-macos-arm64
-     ```
-   - **Option 2**: Go to System Preferences → Security & Privacy → Click "Open Anyway"
-   - **Option 3**: Right-click the executable → Open → Click "Open" in the dialog
-4. Move it to a location in your PATH (optional):
-   ```bash
-   sudo mv bin/mockingsse-macos-arm64 /usr/local/bin/mockingsse
-   ```
-5. Run it:
-   ```bash
-   mockingsse
-   ```
-   
-Or run directly from bin directory:
-```bash
-./bin/mockingsse-macos-arm64
-```
-
-The executable is completely standalone and doesn't require Node.js or npm to be installed.
-
-## Distribution
-
-### GitHub Releases
-
-Executables are automatically built and released when you push a version tag:
-
-```bash
-# Create and push a version tag
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-This will trigger GitHub Actions to build executables for all platforms and create a release with downloadable archives:
-- `mockingsse-macos-arm64.tar.gz` - macOS Apple Silicon
-- `mockingsse-macos-x64.tar.gz` - macOS Intel
-- `mockingsse-linux-x64.tar.gz` - Linux
-- `mockingsse-windows-x64.zip` - Windows
-
-### Installing from GitHub Release
-
-1. Go to the [Releases](https://github.com/onuralpavci/MockingSSE/releases) page
-2. Download the archive for your platform
-3. Extract the archive:
-   ```bash
-   # macOS/Linux
-   tar -xzf mockingsse-macos-arm64.tar.gz
-   chmod +x mockingsse
-   
-   # Windows
-   unzip mockingsse-windows-x64.zip
-   ```
-4. **macOS Gatekeeper Warning**: If you see "Apple could not verify" warning on macOS:
-   - **Option 1** (Recommended): Remove quarantine flag:
-     ```bash
-     xattr -d com.apple.quarantine mockingsse
-     ```
-   - **Option 2**: Go to System Preferences → Security & Privacy → Click "Open Anyway"
-   - **Option 3**: Right-click the executable → Open → Click "Open" in the dialog
-5. Move to a location in your PATH (optional):
-   ```bash
-   sudo mv mockingsse /usr/local/bin/
-   ```
-6. Run it:
-   ```bash
-   mockingsse -mp /path/to/your/mocks
-   ```
-
-## Future Enhancements
-
-- URL matching configuration (path-only, query parameters, headers)
-- Mock templates
-- Export/import mocks
-- Connection statistics
-- Real-time event monitoring
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/mocks` | GET | List all mocks |
+| `/api/mocks/:id` | GET | Get single mock |
+| `/api/mocks` | POST | Create mock |
+| `/api/mocks/:id` | PUT | Update mock |
+| `/api/mocks/:id` | DELETE | Delete mock |
+| `/api/connections` | GET | Get active connections |
+| `/api/logs` | GET | Get SSE response logs |
+| `/api/logs` | DELETE | Clear logs |
 
 ## License
 
 MIT
-
