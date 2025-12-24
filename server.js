@@ -112,6 +112,56 @@ function ensureMocksDirectory() {
 
 ensureMocksDirectory();
 
+// Get SSE response logs
+app.get('/api/logs', (req, res) => {
+    const mocksDir = getMockFolderPath();
+    const logPath = path.join(mocksDir, 'sse-responses.log');
+    
+    if (!fs.existsSync(logPath)) {
+        return res.json([]);
+    }
+    
+    try {
+        const content = fs.readFileSync(logPath, 'utf8');
+        const entries = content.split('---\n').filter(entry => entry.trim());
+        
+        const logs = entries.map((entry, index) => {
+            const timestampMatch = entry.match(/\[(.+?)\]/);
+            const urlMatch = entry.match(/URL: (.+)/);
+            const responseMatch = entry.match(/Response: ([\s\S]*)/);
+            
+            return {
+                id: index,
+                timestamp: timestampMatch ? timestampMatch[1] : null,
+                url: urlMatch ? urlMatch[1].trim() : null,
+                response: responseMatch ? responseMatch[1].trim() : null
+            };
+        }).filter(log => log.url && log.response);
+        
+        // Return in reverse order (newest first)
+        res.json(logs.reverse());
+    } catch (error) {
+        console.error('[Server] Error reading logs:', error.message);
+        res.status(500).json({ error: 'Failed to read logs' });
+    }
+});
+
+// Clear SSE response logs
+app.delete('/api/logs', (req, res) => {
+    const mocksDir = getMockFolderPath();
+    const logPath = path.join(mocksDir, 'sse-responses.log');
+    
+    try {
+        if (fs.existsSync(logPath)) {
+            fs.writeFileSync(logPath, '');
+        }
+        res.json({ success: true });
+    } catch (error) {
+        console.error('[Server] Error clearing logs:', error.message);
+        res.status(500).json({ error: 'Failed to clear logs' });
+    }
+});
+
 app.get('/api/mocks', (req, res) => {
     const mocksDir = getMockFolderPath();
     const domainsPath = path.join(mocksDir, 'Domains');
