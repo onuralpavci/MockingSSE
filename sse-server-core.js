@@ -6,11 +6,142 @@
  */
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
 const connections = new Map();
 const mockTimers = new Map();
+const realConnections = new Map(); // Store real SSE connections
+
+// Get log file path
+function getLogFilePath(mockFolderPath) {
+    const basePath = mockFolderPath || process.env.MOCKINGSSE_FOLDER || __dirname;
+    return path.join(basePath, 'sse-responses.log');
+}
+
+// Log real SSE response to file
+function logRealSSEResponse(url, data, mockFolderPath) {
+    const logPath = getLogFilePath(mockFolderPath);
+    const timestamp = new Date().toISOString();
+    const logEntry = `[${timestamp}] URL: ${url}\nResponse: ${data}\n---\n`;
+    
+    fs.appendFile(logPath, logEntry, (err) => {
+        if (err) {
+            console.error('[SSE Logger] Error writing to log file:', err.message);
+        }
+    });
+}
+
+// Create real SSE connection to the actual server
+function createRealSSEConnection(connectionId, targetUrl, headers, mockFolderPath) {
+    try {
+        const parsedUrl = new URL(targetUrl);
+        const isHttps = parsedUrl.protocol === 'https:';
+        const client = isHttps ? https : http;
+        
+        // Build request headers - forward relevant headers from original request
+        const requestHeaders = {
+            'Accept': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
+        };
+        
+        // Forward authorization and other relevant headers
+        if (headers['authorization']) {
+            requestHeaders['Authorization'] = headers['authorization'];
+        }
+        if (headers['x-api-key']) {
+            requestHeaders['X-API-Key'] = headers['x-api-key'];
+        }
+        // Forward any custom headers that might be needed
+        Object.keys(headers).forEach(key => {
+            const lowerKey = key.toLowerCase();
+            if (lowerKey.startsWith('x-') && 
+                lowerKey !== 'x-sse-url' && 
+                lowerKey !== 'x-scenario') {
+                requestHeaders[key] = headers[key];
+            }
+        });
+        
+        const options = {
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port || (isHttps ? 443 : 80),
+            path: parsedUrl.pathname + parsedUrl.search,
+            method: 'GET',
+            headers: requestHeaders
+        };
+        
+        console.log(`[SSE Real] Connecting to real server: ${targetUrl}`);
+        
+        const req = client.request(options, (res) => {
+            console.log(`[SSE Real] Connected to ${targetUrl} (status: ${res.statusCode})`);
+            
+            let buffer = '';
+            
+            res.on('data', (chunk) => {
+                buffer += chunk.toString();
+                
+                // Process complete SSE events (ending with \n\n)
+                const events = buffer.split('\n\n');
+                buffer = events.pop() || ''; // Keep incomplete event in buffer
+                
+                events.forEach(event => {
+                    if (event.trim()) {
+                        // Extract data from SSE event
+                        const dataMatch = event.match(/^data:\s*(.+)$/m);
+                        if (dataMatch) {
+                            const data = dataMatch[1];
+                            console.log(`[SSE Real] Received from ${parsedUrl.hostname}: ${data.substring(0, 100)}...`);
+                            logRealSSEResponse(targetUrl, data, mockFolderPath);
+                        } else if (!event.startsWith(':')) {
+                            // Log non-comment events
+                            console.log(`[SSE Real] Event from ${parsedUrl.hostname}: ${event.substring(0, 100)}...`);
+                            logRealSSEResponse(targetUrl, event, mockFolderPath);
+                        }
+                    }
+                });
+            });
+            
+            res.on('end', () => {
+                console.log(`[SSE Real] Connection ended for ${targetUrl}`);
+                realConnections.delete(connectionId);
+            });
+            
+            res.on('error', (err) => {
+                console.error(`[SSE Real] Response error for ${targetUrl}:`, err.message);
+                realConnections.delete(connectionId);
+            });
+        });
+        
+        req.on('error', (err) => {
+            console.error(`[SSE Real] Connection error for ${targetUrl}:`, err.message);
+            realConnections.delete(connectionId);
+        });
+        
+        req.end();
+        
+        // Store the request so we can abort it later
+        realConnections.set(connectionId, req);
+        
+    } catch (error) {
+        console.error(`[SSE Real] Failed to create connection to ${targetUrl}:`, error.message);
+    }
+}
+
+// Close real SSE connection
+function closeRealSSEConnection(connectionId) {
+    const req = realConnections.get(connectionId);
+    if (req) {
+        try {
+            req.destroy();
+            console.log(`[SSE Real] Closed real connection for: ${connectionId}`);
+        } catch (err) {
+            console.error(`[SSE Real] Error closing connection:`, err.message);
+        }
+        realConnections.delete(connectionId);
+    }
+}
 
 function generateConnectionId() {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -396,10 +527,15 @@ function createSSEServer(port, mockFolderPath) {
 
         console.log(`[SSE] Connection opened: ${connectionId} for URL: ${urlParam}${scenario ? ` with scenario: ${scenario}` : ''}`);
 
+        // Start mock responses
         checkAndStartMock(connectionId, targetUrl, scenario, mockFolderPath);
+        
+        // Also create real SSE connection to log actual server responses
+        createRealSSEConnection(connectionId, targetUrl, req.headers, mockFolderPath);
 
         req.on('close', () => {
             clearMockTimers(connectionId);
+            closeRealSSEConnection(connectionId); // Close real connection too
             connections.delete(connectionId);
             console.log(`[SSE] Connection closed: ${connectionId}`);
         });
