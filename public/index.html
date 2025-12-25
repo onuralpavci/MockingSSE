@@ -65,6 +65,30 @@
                             </div>
 
                             <div class="form-group">
+                                <label>Initial Connection Response</label>
+                                <div class="initial-status-config">
+                                    <div class="initial-status-option">
+                                        <label for="initialStatus">HTTP Status Code</label>
+                                        <select id="initialStatus">
+                                            <option value="200">200 OK (Normal SSE)</option>
+                                            <option value="401">401 Unauthorized</option>
+                                            <option value="403">403 Forbidden</option>
+                                            <option value="404">404 Not Found</option>
+                                            <option value="429">429 Too Many Requests</option>
+                                            <option value="500">500 Internal Server Error</option>
+                                            <option value="502">502 Bad Gateway</option>
+                                            <option value="503">503 Service Unavailable</option>
+                                        </select>
+                                        <small>If not 200, connection will immediately return this HTTP error (no SSE stream)</small>
+                                    </div>
+                                    <div class="initial-status-option" id="initialStatusBodyGroup" style="display: none;">
+                                        <label for="initialStatusBody">Error Response Body (JSON)</label>
+                                        <textarea id="initialStatusBody" rows="3" placeholder='{"error": "Unauthorized", "code": "AUTH_EXPIRED"}'></textarea>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
                                 <label>URL Matching Configuration</label>
                                 <div class="matching-config">
                                     <div class="matching-option">
@@ -104,24 +128,41 @@
                                             <label>Time (ms)</label>
                                             <input type="number" class="timeline-time-input" value="0" min="0" step="100">
                                         </div>
+                                        <div class="timeline-action">
+                                            <label>Action</label>
+                                            <select class="timeline-action-select">
+                                                <option value="send">Send Response</option>
+                                                <option value="close">Close Connection</option>
+                                            </select>
+                                        </div>
                                         <div class="timeline-response">
                                             <label>Response</label>
                                             <select class="timeline-response-select">
                                                 <option value="0">Response 1</option>
                                             </select>
                                         </div>
-                                        <div class="timeline-status">
-                                            <label>Status Code</label>
-                                            <select class="timeline-status-select">
-                                                <option value="200">200 OK</option>
-                                                <option value="201">201 Created</option>
-                                                <option value="400">400 Bad Request</option>
-                                                <option value="401">401 Unauthorized</option>
-                                                <option value="403">403 Forbidden</option>
-                                                <option value="404">404 Not Found</option>
-                                                <option value="500">500 Internal Server Error</option>
-                                                <option value="502">502 Bad Gateway</option>
-                                                <option value="503">503 Service Unavailable</option>
+                                        <div class="timeline-event">
+                                            <label>Event Type</label>
+                                            <select class="timeline-event-select">
+                                                <option value="">message (default)</option>
+                                                <optgroup label="Position & Order Events">
+                                                    <option value="position">position</option>
+                                                    <option value="order">order</option>
+                                                    <option value="optionOrder">optionOrder</option>
+                                                    <option value="warrantOrder">warrantOrder</option>
+                                                    <option value="optionPositionExtended">optionPositionExtended</option>
+                                                    <option value="warrantPositionExtended">warrantPositionExtended</option>
+                                                    <option value="optionExercise">optionExercise</option>
+                                                    <option value="dividendPayment">dividendPayment</option>
+                                                </optgroup>
+                                                <optgroup label="Error Events">
+                                                    <option value="error">error</option>
+                                                    <option value="maintenance">maintenance</option>
+                                                    <option value="warning">warning</option>
+                                                </optgroup>
+                                                <optgroup label="Other">
+                                                    <option value="status">status</option>
+                                                </optgroup>
                                             </select>
                                         </div>
                                         <button type="button" class="btn-remove-timeline">Remove</button>

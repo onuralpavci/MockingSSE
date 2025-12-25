@@ -243,9 +243,11 @@ app.get('/api/mocks/:id', (req, res) => {
 });
 
 app.post('/api/mocks', (req, res) => {
-    const { url, responses, data, domain = 'Dev', matching, scenario } = req.body;
+    const { url, responses, data, domain = 'Dev', matching, scenario, initialStatus, initialStatusBody } = req.body;
     
-    if (!url || !responses || !data) {
+    // For initial error responses, data and responses can be empty
+    const hasInitialError = initialStatus && initialStatus !== 200;
+    if (!url || (!hasInitialError && (!responses || !data))) {
         return res.status(400).json({ error: 'Missing required fields: url, responses, data' });
     }
 
@@ -277,9 +279,17 @@ app.post('/api/mocks', (req, res) => {
         url,
         matching: matching || null,
         scenario: scenario || null,
-        responses,
-        data
+        responses: responses || [],
+        data: data || []
     };
+    
+    // Add initial status fields if present
+    if (initialStatus && initialStatus !== 200) {
+        mockData.initialStatus = initialStatus;
+        if (initialStatusBody) {
+            mockData.initialStatusBody = initialStatusBody;
+        }
+    }
 
     try {
         const fileId = scenarioHash ? `${urlHash}_${scenarioHash}` : urlHash;
@@ -298,7 +308,7 @@ app.post('/api/mocks', (req, res) => {
 });
 
 app.put('/api/mocks/:id', (req, res) => {
-    const { url, responses, data, domain = 'Dev', matching, scenario } = req.body;
+    const { url, responses, data, domain = 'Dev', matching, scenario, initialStatus, initialStatusBody } = req.body;
     
     const mocksDir = getMockFolderPath();
     const sseFolder = path.join(mocksDir, 'Domains', domain, 'SSE');
@@ -322,6 +332,25 @@ app.put('/api/mocks/:id', (req, res) => {
         responses: responses || [],
         data: data || []
     };
+    
+    // Handle initial status fields
+    if (initialStatus !== undefined) {
+        if (initialStatus && initialStatus !== 200) {
+            mockData.initialStatus = initialStatus;
+            if (initialStatusBody) {
+                mockData.initialStatusBody = initialStatusBody;
+            }
+        }
+        // If initialStatus is 200, don't include these fields (remove them if they existed)
+    } else {
+        // Preserve existing values if not provided
+        if (existingMock.initialStatus) {
+            mockData.initialStatus = existingMock.initialStatus;
+        }
+        if (existingMock.initialStatusBody) {
+            mockData.initialStatusBody = existingMock.initialStatusBody;
+        }
+    }
 
     try {
         fs.writeFileSync(filePath, JSON.stringify(mockData, null, 2));

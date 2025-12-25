@@ -424,8 +424,8 @@ header h1 {
 
 .timeline-item {
     display: grid;
-    grid-template-columns: 150px 1fr 120px auto;
-    gap: 15px;
+    grid-template-columns: 120px 140px 1fr 150px auto;
+    gap: 12px;
     align-items: end;
     padding: 15px;
     border: 2px solid #e0e0e0;
@@ -434,29 +434,36 @@ header h1 {
 
 .timeline-time,
 .timeline-response,
-.timeline-status {
+.timeline-action,
+.timeline-event {
     display: flex;
     flex-direction: column;
 }
 
 .timeline-time label,
-.timeline-response label {
+.timeline-response label,
+.timeline-action label,
+.timeline-event label {
     margin-bottom: 5px;
     font-size: 12px;
 }
 
 .timeline-time-input,
 .timeline-response-select,
-.timeline-status-select {
+.timeline-action-select,
+.timeline-event-select {
     width: 100%;
     padding: 8px;
     border: 2px solid #e0e0e0;
     border-radius: 4px;
 }
 
-.timeline-status label {
-    margin-bottom: 5px;
-    font-size: 12px;
+.timeline-action-select {
+    background-color: #fff;
+}
+
+.timeline-event-select {
+    background-color: #fff;
 }
 
 .btn-remove-timeline {
@@ -630,6 +637,43 @@ header h1 {
     border-radius: 4px;
     display: inline-block;
     font-weight: 500;
+}
+
+/* Initial Status Config */
+.initial-status-config {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    padding: 15px;
+    background: #fff8e1;
+    border-radius: 6px;
+    border: 1px solid #ffca28;
+}
+
+.initial-status-option {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.initial-status-option label {
+    font-weight: 500;
+    margin-bottom: 0;
+}
+
+.initial-status-option small {
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+}
+
+.initial-status-option select,
+.initial-status-option textarea {
+    width: 100%;
+    padding: 8px;
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Courier New', monospace;
 }
 
 

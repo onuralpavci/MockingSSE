@@ -147,6 +147,22 @@ function generateConnectionId() {
     return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
+// HTTP status code to message mapping
+function getStatusMessage(statusCode) {
+    const messages = {
+        400: 'Bad Request',
+        401: 'Unauthorized',
+        403: 'Forbidden',
+        404: 'Not Found',
+        429: 'Too Many Requests',
+        500: 'Internal Server Error',
+        502: 'Bad Gateway',
+        503: 'Service Unavailable',
+        504: 'Gateway Timeout'
+    };
+    return messages[statusCode] || 'Error';
+}
+
 function getMockFolderPath(mockFolderPath) {
     return mockFolderPath || process.env.MOCKINGSSE_FOLDER || path.join(__dirname, 'mocks');
 }
@@ -361,7 +377,7 @@ function startMock(connectionId, mockData) {
     
     const { url: mockUrl, responses, data } = mockData;
     
-    if (!responses || !Array.isArray(responses) || !data || !Array.isArray(data)) {
+    if (!responses || !Array.isArray(responses)) {
         console.error(`[SSE] Invalid mock data format for connection: ${connectionId}`);
         return;
     }
@@ -369,22 +385,39 @@ function startMock(connectionId, mockData) {
     const timers = [];
     
     responses.forEach((response, index) => {
-        const { time, response: responseIndex, statusCode = 200 } = response;
+        const { time, response: responseIndex, event: eventType, action } = response;
         
-        if (typeof time !== 'number' || typeof responseIndex !== 'number') {
-            console.error(`[SSE] Invalid response format at index ${index}`);
+        if (typeof time !== 'number') {
+            console.error(`[SSE] Invalid response format at index ${index}: missing time`);
             return;
         }
         
-        if (responseIndex < 0 || responseIndex >= data.length) {
+        // Handle "close" action - close connection at specified time
+        if (action === 'close') {
+            const timer = setTimeout(() => {
+                closeConnection(connectionId);
+                console.log(`[SSE] Connection ${connectionId} closed by mock action at ${time}ms`);
+            }, time);
+            timers.push(timer);
+            return;
+        }
+        
+        // For data responses, validate responseIndex
+        if (typeof responseIndex !== 'number') {
+            console.error(`[SSE] Invalid response format at index ${index}: missing response index`);
+            return;
+        }
+        
+        if (!data || !Array.isArray(data) || responseIndex < 0 || responseIndex >= data.length) {
             console.error(`[SSE] Response index ${responseIndex} out of bounds`);
             return;
         }
         
         const timer = setTimeout(() => {
             const responseData = data[responseIndex];
-            sendEventToConnection(connectionId, JSON.stringify(responseData), statusCode);
-            console.log(`[SSE] Mock event sent to connection ${connectionId} at ${time}ms (response index: ${responseIndex}, statusCode: ${statusCode})`);
+            // Use custom event type if specified (e.g., "error", "maintenance")
+            sendEventToConnection(connectionId, JSON.stringify(responseData), 200, eventType);
+            console.log(`[SSE] Mock event sent to connection ${connectionId} at ${time}ms (response index: ${responseIndex}${eventType ? `, event: ${eventType}` : ''})`);
         }, time);
         
         timers.push(timer);
@@ -414,16 +447,42 @@ function checkAndStartMock(connectionId, targetUrl, scenario, mockFolderPath) {
     }
 }
 
-function sendEventToConnection(connectionId, data, statusCode = 200) {
+function sendEventToConnection(connectionId, data, statusCode = 200, eventType = null) {
     const connection = connections.get(connectionId);
     if (connection && connection.response) {
-        // Include statusCode in the SSE event
         const eventData = typeof data === 'string' ? data : JSON.stringify(data);
-        const sseEvent = `event: response\ndata: {"statusCode": ${statusCode}, "body": ${eventData}}\n\n`;
+        let sseEvent;
+        
+        if (eventType) {
+            // Custom event type (e.g., "error", "maintenance", "warning")
+            // Client needs to use: eventSource.addEventListener('error', handler)
+            sseEvent = `event: ${eventType}\ndata: ${eventData}\n\n`;
+        } else {
+            // Default message event - backward compatible
+            // Client can use: eventSource.onmessage or addEventListener('message', handler)
+            sseEvent = `data: ${eventData}\n\n`;
+        }
+        
         connection.response.write(sseEvent);
-        console.log(`[SSE] Event sent to connection: ${connectionId} (statusCode: ${statusCode})`);
+        console.log(`[SSE] Event sent to connection: ${connectionId}${eventType ? ` (event: ${eventType})` : ''}`);
     } else {
         console.warn(`[SSE] Connection not found: ${connectionId}`);
+    }
+}
+
+// Close a specific connection (for simulating connection drops)
+function closeConnection(connectionId) {
+    const connection = connections.get(connectionId);
+    if (connection && connection.response) {
+        clearMockTimers(connectionId);
+        closeRealSSEConnection(connectionId);
+        try {
+            connection.response.end();
+        } catch (err) {
+            console.error(`[SSE] Error closing connection ${connectionId}:`, err.message);
+        }
+        connections.delete(connectionId);
+        console.log(`[SSE] Connection forcefully closed: ${connectionId}`);
     }
 }
 
@@ -503,6 +562,25 @@ function createSSEServer(port, mockFolderPath) {
         const targetUrl = String(urlParam);
         const scenario = req.headers['scenario'] || req.headers['x-scenario'] || null;
 
+        // Check if mock has initialStatus (connection-level error simulation)
+        const mockFile = findMockFile(targetUrl, scenario, mockFolderPath);
+        
+        if (mockFile && mockFile.mockData.initialStatus && mockFile.mockData.initialStatus !== 200) {
+            // Return HTTP error immediately without starting SSE stream
+            const statusCode = mockFile.mockData.initialStatus;
+            const statusMessage = mockFile.mockData.initialStatusMessage || getStatusMessage(statusCode);
+            const statusBody = mockFile.mockData.initialStatusBody || { error: statusMessage, code: statusCode };
+            
+            console.log(`[SSE] Returning initial HTTP ${statusCode} for URL: ${targetUrl}${scenario ? ` with scenario: ${scenario}` : ''}`);
+            
+            res.writeHead(statusCode, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(JSON.stringify(statusBody));
+            return;
+        }
+
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -527,8 +605,13 @@ function createSSEServer(port, mockFolderPath) {
 
         console.log(`[SSE] Connection opened: ${connectionId} for URL: ${urlParam}${scenario ? ` with scenario: ${scenario}` : ''}`);
 
-        // Start mock responses
-        checkAndStartMock(connectionId, targetUrl, scenario, mockFolderPath);
+        // Start mock responses (mock already found above)
+        if (mockFile) {
+            console.log(`[SSE] Mock found for URL: ${targetUrl}${scenario ? ` with scenario: ${scenario}` : ''}, starting mock...`);
+            startMock(connectionId, mockFile.mockData);
+        } else {
+            console.log(`[SSE] No mock found for URL: ${targetUrl}${scenario ? ` with scenario: ${scenario}` : ''}`);
+        }
         
         // Also create real SSE connection to log actual server responses
         createRealSSEConnection(connectionId, targetUrl, req.headers, mockFolderPath);
@@ -680,6 +763,7 @@ module.exports = {
     sendEventToAll,
     findMockFile,
     startMock,
-    matchUrlWithConfig
+    matchUrlWithConfig,
+    closeConnection
 };
 

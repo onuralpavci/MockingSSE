@@ -151,6 +151,18 @@ function openMockEditor(mock = null) {
         document.getElementById('mockDomain').value = mock.domain || 'Dev';
         document.getElementById('mockScenario').value = mock.scenario || '';
         
+        // Load initial status configuration
+        const initialStatus = mock.initialStatus || 200;
+        document.getElementById('initialStatus').value = initialStatus;
+        const initialStatusBodyGroup = document.getElementById('initialStatusBodyGroup');
+        if (initialStatus !== 200) {
+            initialStatusBodyGroup.style.display = 'block';
+            document.getElementById('initialStatusBody').value = mock.initialStatusBody ? JSON.stringify(mock.initialStatusBody, null, 2) : '';
+        } else {
+            initialStatusBodyGroup.style.display = 'none';
+            document.getElementById('initialStatusBody').value = '';
+        }
+        
         // Load matching configuration
         if (mock.matching) {
             document.getElementById('matchAllQueries').checked = mock.matching.matchAllQueries || false;
@@ -171,7 +183,14 @@ function openMockEditor(mock = null) {
         const timelineContainer = document.getElementById('timelineContainer');
         timelineContainer.innerHTML = '';
         mock.responses.forEach((response, index) => {
-            addTimelineItem(response.time, response.response, mock.data.length, index, response.statusCode || 200);
+            addTimelineItem(
+                response.time, 
+                response.response, 
+                mock.data.length, 
+                index, 
+                response.action || 'send',
+                response.event || ''
+            );
         });
         
         // Show delete and duplicate buttons
@@ -183,6 +202,9 @@ function openMockEditor(mock = null) {
         document.getElementById('matchAllQueries').checked = false;
         document.getElementById('matchQueries').value = '';
         document.getElementById('mockScenario').value = '';
+        document.getElementById('initialStatus').value = '200';
+        document.getElementById('initialStatusBodyGroup').style.display = 'none';
+        document.getElementById('initialStatusBody').value = '';
         document.getElementById('responsesContainer').innerHTML = `
             <div class="response-item">
                 <div class="response-header">
@@ -198,24 +220,27 @@ function openMockEditor(mock = null) {
                     <label>Time (ms)</label>
                     <input type="number" class="timeline-time-input" value="0" min="0" step="100">
                 </div>
+                <div class="timeline-action">
+                    <label>Action</label>
+                    <select class="timeline-action-select">
+                        <option value="send">Send Response</option>
+                        <option value="close">Close Connection</option>
+                    </select>
+                </div>
                 <div class="timeline-response">
                     <label>Response</label>
                     <select class="timeline-response-select">
                         <option value="0">Response 1</option>
                     </select>
                 </div>
-                <div class="timeline-status">
-                    <label>Status Code</label>
-                    <select class="timeline-status-select">
-                        <option value="200">200 OK</option>
-                        <option value="201">201 Created</option>
-                        <option value="400">400 Bad Request</option>
-                        <option value="401">401 Unauthorized</option>
-                        <option value="403">403 Forbidden</option>
-                        <option value="404">404 Not Found</option>
-                        <option value="500">500 Internal Server Error</option>
-                        <option value="502">502 Bad Gateway</option>
-                        <option value="503">503 Service Unavailable</option>
+                <div class="timeline-event">
+                    <label>Event Type</label>
+                    <select class="timeline-event-select">
+                        <option value="">message (default)</option>
+                        <option value="error">error</option>
+                        <option value="maintenance">maintenance</option>
+                        <option value="warning">warning</option>
+                        <option value="status">status</option>
                     </select>
                 </div>
                 <button type="button" class="btn-remove-timeline">Remove</button>
@@ -255,7 +280,7 @@ function attachEditorListeners() {
     document.getElementById('addTimelineBtn').onclick = () => {
         const container = document.getElementById('timelineContainer');
         const responseCount = document.getElementById('responsesContainer').children.length;
-        addTimelineItem(0, 0, responseCount, container.children.length, 200);
+        addTimelineItem(0, 0, responseCount, container.children.length, 'send', '');
     };
     
     // Remove timeline buttons
@@ -287,7 +312,7 @@ function addResponseItem(data, index) {
     };
 }
 
-function addTimelineItem(time, responseIndex, responseCount, index, statusCode = 200) {
+function addTimelineItem(time, responseIndex, responseCount, index, action = 'send', eventType = '') {
     const container = document.getElementById('timelineContainer');
     const item = document.createElement('div');
     item.className = 'timeline-item';
@@ -296,38 +321,76 @@ function addTimelineItem(time, responseIndex, responseCount, index, statusCode =
         `<option value="${i}" ${i === responseIndex ? 'selected' : ''}>Response ${i + 1}</option>`
     ).join('');
     
-    const statusOptions = [
-        { value: 200, label: '200 OK' },
-        { value: 201, label: '201 Created' },
-        { value: 400, label: '400 Bad Request' },
-        { value: 401, label: '401 Unauthorized' },
-        { value: 403, label: '403 Forbidden' },
-        { value: 404, label: '404 Not Found' },
-        { value: 500, label: '500 Internal Server Error' },
-        { value: 502, label: '502 Bad Gateway' },
-        { value: 503, label: '503 Service Unavailable' }
-    ].map(opt => `<option value="${opt.value}" ${opt.value == statusCode ? 'selected' : ''}>${opt.label}</option>`).join('');
+    const actionOptions = [
+        { value: 'send', label: 'Send Response' },
+        { value: 'close', label: 'Close Connection' }
+    ].map(opt => `<option value="${opt.value}" ${opt.value === action ? 'selected' : ''}>${opt.label}</option>`).join('');
+    
+    const eventOptionsHtml = `
+        <option value="" ${eventType === '' ? 'selected' : ''}>message (default)</option>
+        <optgroup label="Position & Order Events">
+            <option value="position" ${eventType === 'position' ? 'selected' : ''}>position</option>
+            <option value="order" ${eventType === 'order' ? 'selected' : ''}>order</option>
+            <option value="optionOrder" ${eventType === 'optionOrder' ? 'selected' : ''}>optionOrder</option>
+            <option value="warrantOrder" ${eventType === 'warrantOrder' ? 'selected' : ''}>warrantOrder</option>
+            <option value="optionPositionExtended" ${eventType === 'optionPositionExtended' ? 'selected' : ''}>optionPositionExtended</option>
+            <option value="warrantPositionExtended" ${eventType === 'warrantPositionExtended' ? 'selected' : ''}>warrantPositionExtended</option>
+            <option value="optionExercise" ${eventType === 'optionExercise' ? 'selected' : ''}>optionExercise</option>
+            <option value="dividendPayment" ${eventType === 'dividendPayment' ? 'selected' : ''}>dividendPayment</option>
+        </optgroup>
+        <optgroup label="Error Events">
+            <option value="error" ${eventType === 'error' ? 'selected' : ''}>error</option>
+            <option value="maintenance" ${eventType === 'maintenance' ? 'selected' : ''}>maintenance</option>
+            <option value="warning" ${eventType === 'warning' ? 'selected' : ''}>warning</option>
+        </optgroup>
+        <optgroup label="Other">
+            <option value="status" ${eventType === 'status' ? 'selected' : ''}>status</option>
+        </optgroup>
+    `;
+    
+    const isCloseAction = action === 'close';
     
     item.innerHTML = `
         <div class="timeline-time">
             <label>Time (ms)</label>
             <input type="number" class="timeline-time-input" value="${time}" min="0" step="100">
         </div>
-        <div class="timeline-response">
+        <div class="timeline-action">
+            <label>Action</label>
+            <select class="timeline-action-select">
+                ${actionOptions}
+            </select>
+        </div>
+        <div class="timeline-response" style="${isCloseAction ? 'opacity: 0.5;' : ''}">
             <label>Response</label>
-            <select class="timeline-response-select">
+            <select class="timeline-response-select" ${isCloseAction ? 'disabled' : ''}>
                 ${options}
             </select>
         </div>
-        <div class="timeline-status">
-            <label>Status Code</label>
-            <select class="timeline-status-select">
-                ${statusOptions}
+        <div class="timeline-event" style="${isCloseAction ? 'opacity: 0.5;' : ''}">
+            <label>Event Type</label>
+            <select class="timeline-event-select" ${isCloseAction ? 'disabled' : ''}>
+                ${eventOptionsHtml}
             </select>
         </div>
         <button type="button" class="btn-remove-timeline">Remove</button>
     `;
     container.appendChild(item);
+    
+    // Action change handler
+    const actionSelect = item.querySelector('.timeline-action-select');
+    const responseSelect = item.querySelector('.timeline-response-select');
+    const eventSelect = item.querySelector('.timeline-event-select');
+    const responseDiv = item.querySelector('.timeline-response');
+    const eventDiv = item.querySelector('.timeline-event');
+    
+    actionSelect.onchange = () => {
+        const isClose = actionSelect.value === 'close';
+        responseSelect.disabled = isClose;
+        eventSelect.disabled = isClose;
+        responseDiv.style.opacity = isClose ? '0.5' : '1';
+        eventDiv.style.opacity = isClose ? '0.5' : '1';
+    };
     
     item.querySelector('.btn-remove-timeline').onclick = (e) => {
         e.target.closest('.timeline-item').remove();
@@ -358,6 +421,21 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
     const domain = document.getElementById('mockDomain').value;
     const scenario = document.getElementById('mockScenario').value.trim() || null;
     
+    // Collect initial status configuration
+    const initialStatus = parseInt(document.getElementById('initialStatus').value);
+    let initialStatusBody = null;
+    if (initialStatus !== 200) {
+        const bodyText = document.getElementById('initialStatusBody').value.trim();
+        if (bodyText) {
+            try {
+                initialStatusBody = JSON.parse(bodyText);
+            } catch (error) {
+                showToast('Invalid JSON in Initial Status Body', 'error');
+                return;
+            }
+        }
+    }
+    
     // Collect matching configuration
     const matchAllQueries = document.getElementById('matchAllQueries').checked;
     const matchQueriesInput = document.getElementById('matchQueries').value.trim();
@@ -383,8 +461,14 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
         }
     });
     
-    if (responses.length === 0) {
-        showToast('At least one response is required', 'error');
+    // Check if we need responses (only if there's a "send" action in timeline)
+    const hasCloseOnlyTimeline = Array.from(document.querySelectorAll('.timeline-item')).every(item => {
+        const actionSelect = item.querySelector('.timeline-action-select');
+        return actionSelect && actionSelect.value === 'close';
+    });
+    
+    if (responses.length === 0 && !hasCloseOnlyTimeline && initialStatus === 200) {
+        showToast('At least one response is required for send actions', 'error');
         return;
     }
     
@@ -392,12 +476,25 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
     const timeline = [];
     document.querySelectorAll('.timeline-item').forEach(item => {
         const time = parseInt(item.querySelector('.timeline-time-input').value);
-        const responseIndex = parseInt(item.querySelector('.timeline-response-select').value);
-        const statusCode = parseInt(item.querySelector('.timeline-status-select').value);
-        timeline.push({ time, response: responseIndex, statusCode });
+        const actionSelect = item.querySelector('.timeline-action-select');
+        const action = actionSelect ? actionSelect.value : 'send';
+        
+        if (action === 'close') {
+            timeline.push({ time, action: 'close' });
+        } else {
+            const responseIndex = parseInt(item.querySelector('.timeline-response-select').value);
+            const eventSelect = item.querySelector('.timeline-event-select');
+            const eventType = eventSelect ? eventSelect.value : '';
+            
+            const timelineEntry = { time, response: responseIndex };
+            if (eventType) {
+                timelineEntry.event = eventType;
+            }
+            timeline.push(timelineEntry);
+        }
     });
     
-    if (timeline.length === 0) {
+    if (timeline.length === 0 && initialStatus === 200) {
         showToast('At least one timeline event is required', 'error');
         return;
     }
@@ -411,8 +508,15 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
         scenario: scenario,
         matching: matching,
         responses: timeline,
-        data: parsedResponses
+        data: parsedResponses,
+        // Always send initialStatus so server knows to clear it if it's 200
+        initialStatus: initialStatus
     };
+    
+    // Add initial status body if not 200
+    if (initialStatus !== 200 && initialStatusBody) {
+        mockData.initialStatusBody = initialStatusBody;
+    }
     
     try {
         let response;
@@ -916,6 +1020,16 @@ async function duplicateMockByScenario(mock, newScenario) {
 // Refresh buttons
 document.getElementById('refreshMocks').addEventListener('click', loadMocks);
 document.getElementById('refreshConnections').addEventListener('click', loadConnections);
+
+// Initial Status change handler
+document.getElementById('initialStatus').addEventListener('change', (e) => {
+    const bodyGroup = document.getElementById('initialStatusBodyGroup');
+    if (e.target.value !== '200') {
+        bodyGroup.style.display = 'block';
+    } else {
+        bodyGroup.style.display = 'none';
+    }
+});
 
 // Initial load
 loadMocks();
