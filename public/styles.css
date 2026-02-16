@@ -451,7 +451,7 @@ header h1 {
 .timeline-time-input,
 .timeline-response-select,
 .timeline-action-select,
-.timeline-event-select {
+.timeline-event-input {
     width: 100%;
     padding: 8px;
     border: 2px solid #e0e0e0;
@@ -462,8 +462,15 @@ header h1 {
     background-color: #fff;
 }
 
-.timeline-event-select {
+.timeline-event-input {
     background-color: #fff;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 13px;
+}
+
+.timeline-event-input::placeholder {
+    color: #999;
+    font-style: italic;
 }
 
 .btn-remove-timeline {
@@ -675,5 +682,4 @@ header h1 {
     border-radius: 4px;
     font-family: 'Monaco', 'Courier New', monospace;
 }
-
 

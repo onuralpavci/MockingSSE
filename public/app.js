@@ -235,13 +235,7 @@ function openMockEditor(mock = null) {
                 </div>
                 <div class="timeline-event">
                     <label>Event Type</label>
-                    <select class="timeline-event-select">
-                        <option value="">message (default)</option>
-                        <option value="error">error</option>
-                        <option value="maintenance">maintenance</option>
-                        <option value="warning">warning</option>
-                        <option value="status">status</option>
-                    </select>
+                    <input type="text" class="timeline-event-input" placeholder="empty = default message">
                 </div>
                 <button type="button" class="btn-remove-timeline">Remove</button>
             </div>
@@ -326,27 +320,7 @@ function addTimelineItem(time, responseIndex, responseCount, index, action = 'se
         { value: 'close', label: 'Close Connection' }
     ].map(opt => `<option value="${opt.value}" ${opt.value === action ? 'selected' : ''}>${opt.label}</option>`).join('');
     
-    const eventOptionsHtml = `
-        <option value="" ${eventType === '' ? 'selected' : ''}>message (default)</option>
-        <optgroup label="Position & Order Events">
-            <option value="position" ${eventType === 'position' ? 'selected' : ''}>position</option>
-            <option value="order" ${eventType === 'order' ? 'selected' : ''}>order</option>
-            <option value="optionOrder" ${eventType === 'optionOrder' ? 'selected' : ''}>optionOrder</option>
-            <option value="warrantOrder" ${eventType === 'warrantOrder' ? 'selected' : ''}>warrantOrder</option>
-            <option value="optionPositionExtended" ${eventType === 'optionPositionExtended' ? 'selected' : ''}>optionPositionExtended</option>
-            <option value="warrantPositionExtended" ${eventType === 'warrantPositionExtended' ? 'selected' : ''}>warrantPositionExtended</option>
-            <option value="optionExercise" ${eventType === 'optionExercise' ? 'selected' : ''}>optionExercise</option>
-            <option value="dividendPayment" ${eventType === 'dividendPayment' ? 'selected' : ''}>dividendPayment</option>
-        </optgroup>
-        <optgroup label="Error Events">
-            <option value="error" ${eventType === 'error' ? 'selected' : ''}>error</option>
-            <option value="maintenance" ${eventType === 'maintenance' ? 'selected' : ''}>maintenance</option>
-            <option value="warning" ${eventType === 'warning' ? 'selected' : ''}>warning</option>
-        </optgroup>
-        <optgroup label="Other">
-            <option value="status" ${eventType === 'status' ? 'selected' : ''}>status</option>
-        </optgroup>
-    `;
+    // Event type is now a text input with datalist for suggestions
     
     const isCloseAction = action === 'close';
     
@@ -369,9 +343,7 @@ function addTimelineItem(time, responseIndex, responseCount, index, action = 'se
         </div>
         <div class="timeline-event" style="${isCloseAction ? 'opacity: 0.5;' : ''}">
             <label>Event Type</label>
-            <select class="timeline-event-select" ${isCloseAction ? 'disabled' : ''}>
-                ${eventOptionsHtml}
-            </select>
+            <input type="text" class="timeline-event-input" placeholder="empty = default message" value="${eventType}" ${isCloseAction ? 'disabled' : ''}>
         </div>
         <button type="button" class="btn-remove-timeline">Remove</button>
     `;
@@ -380,14 +352,14 @@ function addTimelineItem(time, responseIndex, responseCount, index, action = 'se
     // Action change handler
     const actionSelect = item.querySelector('.timeline-action-select');
     const responseSelect = item.querySelector('.timeline-response-select');
-    const eventSelect = item.querySelector('.timeline-event-select');
+    const eventInput = item.querySelector('.timeline-event-input');
     const responseDiv = item.querySelector('.timeline-response');
     const eventDiv = item.querySelector('.timeline-event');
     
     actionSelect.onchange = () => {
         const isClose = actionSelect.value === 'close';
         responseSelect.disabled = isClose;
-        eventSelect.disabled = isClose;
+        eventInput.disabled = isClose;
         responseDiv.style.opacity = isClose ? '0.5' : '1';
         eventDiv.style.opacity = isClose ? '0.5' : '1';
     };
@@ -483,8 +455,8 @@ document.getElementById('mockForm').addEventListener('submit', async (e) => {
             timeline.push({ time, action: 'close' });
         } else {
             const responseIndex = parseInt(item.querySelector('.timeline-response-select').value);
-            const eventSelect = item.querySelector('.timeline-event-select');
-            const eventType = eventSelect ? eventSelect.value : '';
+            const eventInput = item.querySelector('.timeline-event-input');
+            const eventType = eventInput ? eventInput.value.trim() : '';
             
             const timelineEntry = { time, response: responseIndex };
             if (eventType) {
